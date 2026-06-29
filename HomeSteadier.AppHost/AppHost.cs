@@ -1,3 +1,6 @@
+using Aspire.Hosting;
+using k8s.Models;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Read values from configuration
@@ -11,6 +14,16 @@ var postgres = builder.AddPostgres("pgsql")
 
 var db = postgres.AddDatabase(databaseName);
 
-builder.AddProject<Projects.Homesteadier_API>(projectName);
+var api = builder.AddProject<Projects.Homesteadier_API>(projectName);
+
+builder.AddJavaScriptApp("react-frontend", "../ReactApp")
+    .WithReference(api)
+    .WaitFor(api)
+    // Feeds the API endpoint into your TypeScript process env
+    .WithEnvironment("VITE_API_URL", api.GetEndpoint("https"))
+    .WithHttpEndpoint(env: "VITE_PORT")
+    .WithExternalHttpEndpoints();
+
+
 
 builder.Build().Run();
