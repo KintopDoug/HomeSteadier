@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Homesteadier.API/Homesteadier.API.csproj" />
   <Project Path="HomeSteadier.AppHost/HomeSteadier.AppHost.csproj" />
   <Project Path="HomeSteadier.ServiceDefaults/HomeSteadier.ServiceDefaults.csproj" />
 </Solution>
