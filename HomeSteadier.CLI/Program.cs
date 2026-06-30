@@ -1,6 +1,5 @@
-﻿using DbUp;
+﻿using HomeSteadier.Database;
 using Microsoft.Extensions.Configuration;
-using System.Reflection;
 
 var sharedConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.shared.json");
 var localConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
@@ -10,6 +9,8 @@ var configuration = new ConfigurationBuilder()
     .AddJsonFile(localConfigPath, optional: true)
     .AddEnvironmentVariables()
     .Build();
+
+var migrationService = new DatabaseMigrationService();
 
 Console.WriteLine("HomeSteadier CLI");
 Console.WriteLine("Type 'help' for available commands, 'exit' to quit.");
@@ -62,28 +63,20 @@ async Task RunMigrations(IConfiguration configuration)
     try
     {
         var connectionString = GetConnectionString(configuration);
-
         Console.WriteLine("Running database migrations...");
 
-        var upgrader = DeployChanges.To
-            .PostgresqlDatabase(connectionString)
-            .WithScriptsEmbeddedInAssembly(Assembly.GetExecutingAssembly())
-            .WithTransaction()
-            .LogToConsole()
-            .Build();
+        var result = await migrationService.RunMigrationsAsync(connectionString);
 
-        var result = upgrader.PerformUpgrade();
-
-        if (!result.Successful)
+        if (!result.Success)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"\nMigration failed: {result.Error}");
+            Console.WriteLine($"\n{result.Message}: {result.Error}");
             Console.ResetColor();
             return;
         }
 
         Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("\nMigrations completed successfully!");
+        Console.WriteLine($"\n{result.Message}");
         Console.ResetColor();
     }
     catch (Exception ex)
