@@ -11,7 +11,7 @@ public class DatabaseMigrationService
         {
             var upgrader = DeployChanges.To
                 .PostgresqlDatabase(connectionString)
-                .WithScriptsEmbeddedInAssembly(Assembly.GetExecutingAssembly())
+                .WithScriptsEmbeddedInAssembly(typeof(DatabaseMigrationService).Assembly)
                 .WithTransaction()
                 .LogToConsole()
                 .Build();
