@@ -8,8 +8,22 @@ var databaseName = builder.Configuration["Database:Name"];
 var databasePort = builder.Configuration["Database:Port"];
 var projectName = builder.Configuration["ProjectName"];
 
+// Postgres password comes from a machine-level environment variable so it's the same
+// value used by Aspire and the CLI. Set it with:
+//   setx POSTGRES_PASSWORD "<password>"
+// setx only updates the registry, not the current process's inherited environment block,
+// so fall back to the User/Machine registry-backed targets in case the terminal/IDE
+// hosting this process hasn't been restarted since the variable was set.
+var postgresPasswordValue = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.Process)
+    ?? Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.User)
+    ?? Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.Machine)
+    ?? throw new InvalidOperationException(
+        "POSTGRES_PASSWORD environment variable is not set. Set it with: setx POSTGRES_PASSWORD \"<password>\" and restart your terminal/IDE.");
+
+var postgresPassword = builder.AddParameter("postgres-password", postgresPasswordValue, secret: true);
+
 // Add PostgreSQL with init script for conditional database creation. use pgvector image to enable vector search capabilities.
-var postgres = builder.AddPostgres("pgsql")
+var postgres = builder.AddPostgres("pgsql", password: postgresPassword)
     .WithImage("pgvector/pgvector", "pg17")
     .WithDataVolume(databaseName)
     .WithHostPort(5432);
