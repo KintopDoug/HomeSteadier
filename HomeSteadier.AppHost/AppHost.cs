@@ -1,7 +1,11 @@
 using Aspire.Hosting;
 using k8s.Models;
+using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
+
+var sharedConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.shared.json");
+builder.Configuration.AddJsonFile(sharedConfigPath, optional: false);
 
 // Read values from configuration
 var databaseName = builder.Configuration["Database:Name"];

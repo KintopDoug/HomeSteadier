@@ -17,6 +17,32 @@ A distributed application built with .NET Aspire, featuring a .NET Core API back
 - **Docker** running (required for PostgreSQL and Aspire services)
 - **Node.js 18+** (for React development)
 
+### Environment Configuration
+
+Before running the application, set the PostgreSQL database password as a machine-level environment variable. This password is used by both Aspire (to initialize the PostgreSQL container) and the CLI (to run database migrations).
+
+#### Windows
+
+```powershell
+setx POSTGRES_PASSWORD "your-secure-password"
+```
+
+Then **restart your terminal or IDE** for the environment variable to take effect.
+
+**Note:** After setting the variable with `setx`, you must close and fully reopen your terminal/IDE window (not just a new tab) for the change to be picked up.
+
+#### macOS/Linux
+
+```bash
+export POSTGRES_PASSWORD="your-secure-password"
+```
+
+To persist it across sessions, add the line above to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
+
+```bash
+echo 'export POSTGRES_PASSWORD="your-secure-password"' >> ~/.bashrc
+```
+
 ### Run the Application
 
 #### Option 1: Using the Batch Script (Recommended for Windows)

@@ -15,4 +15,8 @@
     <ProjectReference Include="..\HomeSteadier.ServiceDefaults\HomeSteadier.ServiceDefaults.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\appsettings.shared.json" Link="appsettings.shared.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="appsettings.shared.json" />
+  </Folder>
   <Project Path="Homesteadier.API/Homesteadier.API.csproj" />
   <Project Path="HomeSteadier.AppHost/HomeSteadier.AppHost.csproj" />
   <Project Path="HomeSteadier.CLI/HomeSteadier.CLI.csproj" />

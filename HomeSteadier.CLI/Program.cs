@@ -2,8 +2,12 @@
 using Microsoft.Extensions.Configuration;
 using System.Reflection;
 
+var sharedConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.shared.json");
+var localConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+
 var configuration = new ConfigurationBuilder()
-    .AddJsonFile("appsettings.json", optional: true)
+    .AddJsonFile(sharedConfigPath, optional: false)
+    .AddJsonFile(localConfigPath, optional: true)
     .AddEnvironmentVariables()
     .Build();
 
@@ -92,13 +96,14 @@ async Task RunMigrations(IConfiguration configuration)
 
 string GetConnectionString(IConfiguration configuration)
 {
-    var baseConnectionString = configuration.GetConnectionString("DefaultConnection")
-        ?? throw new InvalidOperationException(
-            "DefaultConnection not found in appsettings.json");
-
+    var host = configuration["Database:Host"] ?? "localhost";
+    var port = configuration["Database:Port"] ?? "5432";
+    var name = configuration["Database:Name"]
+        ?? throw new InvalidOperationException("Database:Name not found in configuration.");
+    var username = configuration["Database:Username"] ?? "postgres";
     var password = GetPostgresPassword();
 
-    return $"{baseConnectionString};Password={password}";
+    return $"Host={host};Port={port};Database={name};Username={username};Password={password}";
 }
 
 string GetPostgresPassword()
