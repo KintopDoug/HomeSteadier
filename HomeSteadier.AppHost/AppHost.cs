@@ -7,8 +7,9 @@ var builder = DistributedApplication.CreateBuilder(args);
 var databaseName = builder.Configuration["Database:Name"];
 var projectName = builder.Configuration["ProjectName"];
 
-// Add PostgreSQL with init script for conditional database creation
+// Add PostgreSQL with init script for conditional database creation. use pgvector image to enable vector search capabilities.
 var postgres = builder.AddPostgres("pgsql")
+    .WithImage("pgvector/pgvector", "pg17") // or pg16
     .WithDataVolume(databaseName)
     .WithHostPort(5432);
 
