@@ -1,3 +1,5 @@
+using HomeSteadier.Database;
+
 var builder = WebApplication.CreateBuilder(args);
 
 var sharedConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.shared.json");
@@ -13,6 +15,9 @@ builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Run database migrations before starting the app
+await RunDatabaseMigrations(app.Services, app.Configuration);
 
 app.MapDefaultEndpoints();
 
@@ -33,4 +38,47 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
+await app.RunAsync();
+
+async Task RunDatabaseMigrations(IServiceProvider services, IConfiguration configuration)
+{
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var connectionString = BuildConnectionString(configuration);
+        var migrationService = new DatabaseMigrationService();
+
+        var result = await migrationService.RunMigrationsAsync(connectionString);
+
+        if (result.Success)
+        {
+            logger.LogInformation("Database migrations completed successfully");
+        }
+        else
+        {
+            logger.LogError("Database migration failed: {Error}", result.Error);
+            throw new InvalidOperationException($"Database migration failed: {result.Error}");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error running database migrations");
+        throw;
+    }
+}
+
+string BuildConnectionString(IConfiguration configuration)
+{
+    var host = configuration["Database:Host"] ?? "localhost";
+    var port = configuration["Database:Port"] ?? "5432";
+    var name = configuration["Database:Name"]
+        ?? throw new InvalidOperationException("Database:Name not found in configuration.");
+    var username = configuration["Database:Username"] ?? "postgres";
+    var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.Process)
+        ?? Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.User)
+        ?? Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.Machine)
+        ?? throw new InvalidOperationException(
+            "POSTGRES_PASSWORD environment variable is not set. Set it with: setx POSTGRES_PASSWORD \"<password>\" and restart your terminal/IDE.");
+
+    return $"Host={host};Port={port};Database={name};Username={username};Password={password}";
+}
