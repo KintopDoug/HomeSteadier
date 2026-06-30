@@ -1,5 +1,8 @@
 var builder = WebApplication.CreateBuilder(args);
 
+var sharedConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.shared.json");
+builder.Configuration.AddJsonFile(sharedConfigPath, optional: true);
+
 builder.AddServiceDefaults();
 
 // Add services to the container.
