@@ -64,18 +64,31 @@ Once started, the Aspire Dashboard will be available (check console output for t
 - **React Frontend**: Automatically served and accessible through your browser
 - **PostgreSQL**: Running in Docker with persistent storage
 
-### Alternative: Windows Terminal Profile
+### Windows Terminal Profiles
 
-To create a Windows Terminal tab that auto-launches the app:
+To create Windows Terminal tabs that auto-launch the app or CLI:
+
+#### Apphost Profile
 
 1. Open **Windows Terminal Settings** (Ctrl+,)
 2. Go to **Profiles** → **+ New Profile**
 3. Configure:
    - **Name**: `HomeSteadier Apphost`
-   - **Command Line**: `cmd.exe /k "run-aspire.bat`
+   - **Command Line**: `cmd.exe /k "run-aspire.bat"`
    - **Starting Directory**: `directory where the repo is located`
 4. Click **Save**
-5. Now you can launch the app directly from the terminal profile dropdown
+
+#### CLI Profile
+
+1. Open **Windows Terminal Settings** (Ctrl+,)
+2. Go to **Profiles** → **+ New Profile**
+3. Configure:
+   - **Name**: `HomeSteadier CLI`
+   - **Command Line**: `cmd.exe /k "run-cli.bat"`
+   - **Starting Directory**: `directory where the repo is located`
+4. Click **Save**
+
+Now you can launch either the app or the CLI directly from the terminal profile dropdown.
 
 ## Development
 
