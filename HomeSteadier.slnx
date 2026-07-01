@@ -6,5 +6,6 @@
   <Project Path="HomeSteadier.AppHost/HomeSteadier.AppHost.csproj" />
   <Project Path="HomeSteadier.CLI/HomeSteadier.CLI.csproj" />
   <Project Path="HomeSteadier.Database/HomeSteadier.Database.csproj" />
+  <Project Path="HomeSteadier.Models/HomeSteadier.Models.csproj" />
   <Project Path="HomeSteadier.ServiceDefaults/HomeSteadier.ServiceDefaults.csproj" />
 </Solution>
