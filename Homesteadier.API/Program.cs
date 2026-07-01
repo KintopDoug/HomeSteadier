@@ -29,12 +29,11 @@ var autoRegisterType = typeof(AutoRegisterAttribute);
 
 foreach (var type in assembly.GetTypes())
 {
-    // Check if type has [AutoRegister] attribute
     if (type.GetCustomAttributes(autoRegisterType, inherit: false).Length > 0)
     {
-        // Find the interface this type implements
+        // Find the specific repository interface (starts with I, ends with Repository)
         var repositoryInterface = type.GetInterfaces()
-            .FirstOrDefault(i => i.Name == $"I{type.Name}");
+            .FirstOrDefault(i => i.Name.StartsWith("I") && i.Name.EndsWith("Repository"));
 
         if (repositoryInterface != null)
         {
