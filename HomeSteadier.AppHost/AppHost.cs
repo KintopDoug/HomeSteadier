@@ -32,7 +32,8 @@ var postgres = builder.AddPostgres("pgsql", password: postgresPassword)
 
 var db = postgres.AddDatabase(databaseName);
 
-var api = builder.AddProject<Projects.Homesteadier_API>(projectName);
+var api = builder.AddProject<Projects.Homesteadier_API>(projectName)
+            .WithReference(db);
 
 builder.AddJavaScriptApp("react-frontend", "../ReactApp")
     .WithReference(api)
