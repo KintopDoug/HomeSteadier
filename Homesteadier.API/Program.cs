@@ -1,4 +1,7 @@
 using HomeSteadier.Database;
+using Homesteadier.Repository;
+using Homesteadier.Repository.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +16,12 @@ builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
+
+// Configure DbContext and repositories
+var connectionString = BuildConnectionString(builder.Configuration);
+builder.Services.AddDbContext<HomesteadierDbContext>(options =>
+    options.UseNpgsql(connectionString));
+builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 var app = builder.Build();
 

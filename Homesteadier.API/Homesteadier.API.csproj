@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HomeSteadier.ServiceDefaults\HomeSteadier.ServiceDefaults.csproj" />
     <ProjectReference Include="..\HomeSteadier.Database\HomeSteadier.Database.csproj" />
+    <ProjectReference Include="..\Homesteadier.Repository\Homesteadier.Repository.csproj" />
   </ItemGroup>
 
   <ItemGroup>
