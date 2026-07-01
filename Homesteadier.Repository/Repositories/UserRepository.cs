@@ -1,8 +1,9 @@
 using HomeSteadier.Models.Database;
-using Microsoft.EntityFrameworkCore;
+using Homesteadier.Repository;
 
 namespace Homesteadier.Repository.Repositories;
 
+[AutoRegister]
 public class UserRepository : Repository<User>, IUserRepository
 {
     public UserRepository(HomesteadierDbContext context)
@@ -10,16 +11,10 @@ public class UserRepository : Repository<User>, IUserRepository
     {
     }
 
-    public async Task<User?> GetByEmailAsync(string email)
-    {
-        return await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == email);
-    }
-
-    public async Task<List<User>> GetActiveUsersAsync()
-    {
-        return await _context.Users
-            .Where(u => u.IsActive)
-            .ToListAsync();
-    }
+    // Implement custom query methods here. Example:
+    // public async Task<User?> GetByIdAsync(int id)
+    // {
+    //     return await _context.Set<User>()
+    //         .FirstOrDefaultAsync(e => e.Id == id);
+    // }
 }

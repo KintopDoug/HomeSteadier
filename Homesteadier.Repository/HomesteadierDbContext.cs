@@ -10,11 +10,13 @@ public class HomesteadierDbContext : DbContext
     {
     }
 
+
     public DbSet<User> Users { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
 
         modelBuilder.Entity<User>(entity =>
         {
@@ -41,16 +43,17 @@ public class HomesteadierDbContext : DbContext
                 .IsRequired();
 
             entity.Property(e => e.CreatedAt)
-                .HasColumnName("created_at");
+                .HasColumnName("created_at")
+                .IsRequired();
 
             entity.Property(e => e.UpdatedAt)
-                .HasColumnName("updated_at");
+                .HasColumnName("updated_at")
+                .IsRequired();
 
             entity.Property(e => e.IsActive)
-                .HasColumnName("is_active");
+                .HasColumnName("is_active")
+                .IsRequired();
 
-            entity.HasIndex(e => e.Email)
-                .IsUnique();
         });
     }
 }

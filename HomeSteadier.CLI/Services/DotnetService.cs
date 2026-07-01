@@ -286,44 +286,82 @@ public class DotnetService
 
     private async Task UpdateDbContextAsync(string className, List<(string Name, string SqlType, bool IsNullable)> columns)
     {
-        var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
-        var dbContextPath = Path.Combine(solutionRoot, "Homesteadier.Repository", "HomesteadierDbContext.cs");
-
-        if (!File.Exists(dbContextPath))
-            return;
-
-        var content = await File.ReadAllTextAsync(dbContextPath);
-        var pluralName = className + "s";
-
-        // Check if entity already exists in DbContext
-        if (content.Contains($"DbSet<{className}>"))
+        try
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"Skipped: {className} already in DbContext");
+            var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
+            var dbContextPath = Path.Combine(solutionRoot, "Homesteadier.Repository", "HomesteadierDbContext.cs");
+
+            if (!File.Exists(dbContextPath))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"DbContext not found at: {dbContextPath}");
+                Console.ResetColor();
+                return;
+            }
+
+            var content = await File.ReadAllTextAsync(dbContextPath);
+            var pluralName = Pluralize(className);
+
+            // Check if entity already exists in DbContext (either DbSet or configuration)
+            if (content.Contains($"DbSet<{className}>") || content.Contains($"modelBuilder.Entity<{className}>"))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"Skipped: {className} already in DbContext");
+                Console.ResetColor();
+                return;
+            }
+
+            var modified = false;
+
+            // Add DbSet property before OnModelCreating method
+            var dbSetLine = $"    public DbSet<{className}> {pluralName} {{ get; set; }}";
+            var onModelCreatingIndex = content.IndexOf("protected override void OnModelCreating");
+            if (onModelCreatingIndex >= 0)
+            {
+                var lineStart = content.LastIndexOf("\n", onModelCreatingIndex) + 1;
+                content = content.Insert(lineStart, dbSetLine + Environment.NewLine + Environment.NewLine);
+                modified = true;
+            }
+
+            // Add entity configuration before the closing brace of OnModelCreating only if it doesn't exist
+            if (!content.Contains($"modelBuilder.Entity<{className}>"))
+            {
+                var configTemplate = GenerateDbContextConfiguration(className, pluralName, columns);
+                var methodStart = content.IndexOf("protected override void OnModelCreating");
+                if (methodStart >= 0)
+                {
+                    // Find the closing brace of OnModelCreating method (indented with 4 spaces)
+                    var closingBracePattern = Environment.NewLine + "    }";
+                    var closingBraceIndex = content.IndexOf(closingBracePattern, methodStart);
+                    if (closingBraceIndex >= 0)
+                    {
+                        content = content.Insert(closingBraceIndex, Environment.NewLine + Environment.NewLine + configTemplate);
+                        modified = true;
+                    }
+                }
+            }
+
+            if (modified)
+            {
+                await File.WriteAllTextAsync(dbContextPath, content);
+                Console.WriteLine($"Updated DbContext with {className}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Error updating DbContext: {ex.Message}");
             Console.ResetColor();
-            return;
         }
+    }
 
-        // Add DbSet property
-        var dbSetLine = $"    public DbSet<{className}> {pluralName} {{ get; set; }}";
-        var userDbSetIndex = content.IndexOf("public DbSet<User> Users");
-        if (userDbSetIndex >= 0)
-        {
-            var endOfLine = content.IndexOf("\n", userDbSetIndex);
-            content = content.Insert(endOfLine + 1, dbSetLine + "\n");
-        }
-
-        // Add entity configuration in OnModelCreating
-        var configTemplate = GenerateDbContextConfiguration(className, pluralName, columns);
-        var lastConfigIndex = content.LastIndexOf("        });");
-        if (lastConfigIndex >= 0)
-        {
-            var insertPosition = content.IndexOf("\n", lastConfigIndex) + 1;
-            content = content.Insert(insertPosition, "\n" + configTemplate);
-        }
-
-        await File.WriteAllTextAsync(dbContextPath, content);
-        Console.WriteLine($"Updated DbContext with {className}");
+    private string Pluralize(string singular)
+    {
+        if (singular.EndsWith("y"))
+            return singular[..^1] + "ies";
+        if (singular.EndsWith("s") || singular.EndsWith("x") || singular.EndsWith("z"))
+            return singular + "es";
+        return singular + "s";
     }
 
     private string GenerateDbContextConfiguration(string className, string pluralName, List<(string Name, string SqlType, bool IsNullable)> columns)

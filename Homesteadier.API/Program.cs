@@ -1,7 +1,6 @@
-using System.Reflection;
+
 using HomeSteadier.Database;
 using Homesteadier.Repository;
-using Homesteadier.Repository.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,10 +23,10 @@ builder.Services.AddDbContext<HomesteadierDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // Auto-register repositories marked with [AutoRegister] attribute
-var assembly = typeof(Program).Assembly;
 var autoRegisterType = typeof(AutoRegisterAttribute);
+var repositoryAssembly = typeof(HomesteadierDbContext).Assembly;
 
-foreach (var type in assembly.GetTypes())
+foreach (var type in repositoryAssembly.GetTypes())
 {
     if (type.GetCustomAttributes(autoRegisterType, inherit: false).Length > 0)
     {

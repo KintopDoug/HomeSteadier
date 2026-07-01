@@ -15,4 +15,8 @@
     <ProjectReference Include="..\HomeSteadier.Models\HomeSteadier.Models.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Repositories\" />
+  </ItemGroup>
+
 </Project>

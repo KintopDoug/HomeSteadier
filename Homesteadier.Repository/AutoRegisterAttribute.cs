@@ -1,6 +1,6 @@
 namespace Homesteadier.Repository;
 
-[AttributeUsage(AttributeTargets.Interface)]
+[AttributeUsage(AttributeTargets.Class)]
 public class AutoRegisterAttribute : Attribute
 {
 }
