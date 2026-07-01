@@ -41,7 +41,7 @@ while (true)
             await RunMigrations(configuration);
             break;
 
-        case ["dotnet gen"]:
+        case ["dotnet", "gen"]:
             await GenerateModels(configuration);
             break;
 
