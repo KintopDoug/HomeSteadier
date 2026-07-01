@@ -27,6 +27,12 @@ public class DotnetService
             var modelsPath = GetModelsPath();
             Console.WriteLine($"Generating models to: {modelsPath}");
 
+            var repositoriesPath = GetRepositoriesPath();
+            Console.WriteLine($"Generating repositories to: {repositoriesPath}");
+
+            var generatedCount = 0;
+            var skippedRepositories = new List<string>();
+
             foreach (var table in tables)
             {
                 // Skip DbUp's internal schema tracking table
@@ -40,10 +46,39 @@ public class DotnetService
                 var filePath = Path.Combine(modelsPath, $"{className}.cs");
                 await File.WriteAllTextAsync(filePath, classCode);
                 Console.WriteLine($"Generated: {className}.cs");
+                generatedCount++;
+
+                // Generate repository interface and implementation
+                var interfaceFilePath = Path.Combine(repositoriesPath, $"I{className}Repository.cs");
+                var implementationFilePath = Path.Combine(repositoriesPath, $"{className}Repository.cs");
+
+                if (File.Exists(interfaceFilePath) || File.Exists(implementationFilePath))
+                {
+                    skippedRepositories.Add(className);
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"Skipped: I{className}Repository.cs (already exists)");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    var interfaceCode = GenerateRepositoryInterface(className);
+                    var implementationCode = GenerateRepositoryImplementation(className);
+
+                    await File.WriteAllTextAsync(interfaceFilePath, interfaceCode);
+                    Console.WriteLine($"Generated: I{className}Repository.cs");
+
+                    await File.WriteAllTextAsync(implementationFilePath, implementationCode);
+                    Console.WriteLine($"Generated: {className}Repository.cs");
+                }
             }
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"\nSuccessfully generated {tables.Count} model(s)!");
+            Console.WriteLine($"\nSuccessfully generated {generatedCount} model(s) and repositories!");
+            if (skippedRepositories.Count > 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"Skipped {skippedRepositories.Count} existing repository/repositories: {string.Join(", ", skippedRepositories)}");
+            }
             Console.ResetColor();
         }
         catch (Exception ex)
@@ -185,11 +220,53 @@ public class DotnetService
         return plural;
     }
 
+    private string GenerateRepositoryInterface(string className)
+    {
+        return "using HomeSteadier.Models.Database;\n" +
+               "using Homesteadier.Repository;\n\n" +
+               "namespace Homesteadier.Repository.Repositories;\n\n" +
+               $"public interface I{className}Repository : IRepository<{className}>\n" +
+               "{\n" +
+               "    // Example custom query - uncomment and modify for your needs:\n" +
+               "    // Task<" + className + "?> GetByIdAsync(int id);\n" +
+               "    //\n" +
+               "    // Example filtered collection - uncomment and modify:\n" +
+               "    // Task<List<" + className + ">> GetActiveAsync();\n" +
+               "}";
+    }
+
+    private string GenerateRepositoryImplementation(string className)
+    {
+        return "using HomeSteadier.Models.Database;\nusing Homesteadier.Repository;\n\n" +
+               "namespace Homesteadier.Repository.Repositories;\n\n" +
+               "[AutoRegister]\n" +
+               $"public class {className}Repository : Repository<{className}>, I{className}Repository\n" +
+               "{\n" +
+               $"    public {className}Repository(HomesteadierDbContext context)\n" +
+               "        : base(context)\n" +
+               "    {\n" +
+               "    }\n\n" +
+               "    // Implement custom query methods here. Example:\n" +
+               "    // public async Task<" + className + "?> GetByIdAsync(int id)\n" +
+               "    // {\n" +
+               "    //     return await _context.Set<" + className + ">()\n" +
+               "    //         .FirstOrDefaultAsync(e => e.Id == id);\n" +
+               "    // }\n" +
+               "}";
+    }
+
     private string GetModelsPath()
     {
         var currentDir = AppContext.BaseDirectory;
         var solutionDir = FindSolutionRoot(currentDir);
         return Path.Combine(solutionDir, "HomeSteadier.Models", "Database");
+    }
+
+    private string GetRepositoriesPath()
+    {
+        var currentDir = AppContext.BaseDirectory;
+        var solutionDir = FindSolutionRoot(currentDir);
+        return Path.Combine(solutionDir, "Homesteadier.Repository", "Repositories");
     }
 
     private string FindSolutionRoot(string startPath)

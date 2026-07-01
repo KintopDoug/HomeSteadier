@@ -15,6 +15,14 @@ var modelGenerationService = new DotnetService();
 
 Console.WriteLine("HomeSteadier CLI");
 Console.WriteLine();
+
+// Handle command-line arguments
+if (args.Length > 0)
+{
+    await ProcessCommand(args, databaseService, modelGenerationService, configuration);
+    return 0;
+}
+
 PrintHelp();
 Console.WriteLine();
 
@@ -27,12 +35,19 @@ while (true)
         continue;
 
     var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    await ProcessCommand(parts, databaseService, modelGenerationService, configuration);
 
+    Console.WriteLine();
+}
+
+async Task ProcessCommand(string[] parts, DatabaseService databaseService, DotnetService modelGenerationService, IConfiguration configuration)
+{
     switch (parts)
     {
         case ["exit"] or ["quit"]:
             Console.WriteLine("Goodbye!");
-            return 0;
+            Environment.Exit(0);
+            break;
 
         case ["help"]:
             PrintHelp();
@@ -42,18 +57,16 @@ while (true)
             await databaseService.RunMigrationsAsync(configuration);
             break;
 
-        case ["dotnet", "gen"]:
+        case ["dotnet", "gen"] or ["gen"]:
             await modelGenerationService.GenerateModelsAsync(configuration);
             break;
 
         default:
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"Unknown command: '{input}'. Type 'help' for available commands.");
+            Console.WriteLine($"Unknown command: '{string.Join(" ", parts)}'. Type 'help' for available commands.");
             Console.ResetColor();
             break;
     }
-
-    Console.WriteLine();
 }
 
 void PrintHelp()

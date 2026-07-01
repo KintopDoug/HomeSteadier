@@ -1,3 +1,4 @@
+using System.Reflection;
 using HomeSteadier.Database;
 using Homesteadier.Repository;
 using Homesteadier.Repository.Repositories;
@@ -21,7 +22,27 @@ builder.Services.AddSwaggerGen();
 var connectionString = BuildConnectionString(builder.Configuration);
 builder.Services.AddDbContext<HomesteadierDbContext>(options =>
     options.UseNpgsql(connectionString));
-builder.Services.AddScoped<IUserRepository, UserRepository>();
+
+// Auto-register repositories marked with [AutoRegister] attribute
+var assembly = typeof(Program).Assembly;
+var autoRegisterType = typeof(AutoRegisterAttribute);
+
+foreach (var type in assembly.GetTypes())
+{
+    // Check if type has [AutoRegister] attribute
+    if (type.GetCustomAttributes(autoRegisterType, inherit: false).Length > 0)
+    {
+        // Find the interface this type implements
+        var repositoryInterface = type.GetInterfaces()
+            .FirstOrDefault(i => i.Name == $"I{type.Name}");
+
+        if (repositoryInterface != null)
+        {
+            builder.Services.AddScoped(repositoryInterface, type);
+            Console.WriteLine($"Auto-registered: {repositoryInterface.Name} -> {type.Name}");
+        }
+    }
+}
 
 var app = builder.Build();
 
