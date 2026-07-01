@@ -73,19 +73,6 @@ tasklist /FI "PID eq <PID>"
 Stop-Process -Id <PID> -Force
 ```
 
-#### Avoid Fixed Host Ports
-Don't use `.WithHostPort()` in AppHost.cs unless absolutely necessary - it can cause port conflicts:
-```csharp
-// Avoid this (can cause conflicts):
-var postgres = builder.AddPostgres("pgsql")
-	.WithDataVolume(databaseName)
-	.WithHostPort(5432);  // ❌
-
-// Better (let Aspire assign ports dynamically):
-var postgres = builder.AddPostgres("pgsql")
-	.WithDataVolume(databaseName);  // ✅
-```
-
 ### Enable Debug Logging
 To diagnose Aspire/DCP issues, enable debug logging in `appsettings.json`:
 ```json
