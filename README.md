@@ -6,6 +6,7 @@ A distributed application built with .NET Aspire, featuring a .NET Core API back
 
 - **Homesteadier.API** — ASP.NET Core API with OpenAPI/Swagger support
 - **HomeSteadier.AppHost** — .NET Aspire orchestration host for managing services
+- **HomeSteadier.Models** — Shared domain models and entities (class library)
 - **HomeSteadier.ServiceDefaults** — Shared service configuration and defaults
 - **ReactApp** — React frontend (TypeScript + Vite)
 
