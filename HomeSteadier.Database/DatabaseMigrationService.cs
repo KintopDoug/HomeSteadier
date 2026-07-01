@@ -13,6 +13,7 @@ public class DatabaseMigrationService
                 .PostgresqlDatabase(connectionString)
                 .WithScriptsEmbeddedInAssembly(typeof(DatabaseMigrationService).Assembly)
                 .WithTransaction()
+                .JournalToPostgresqlTable("public", "migrations")
                 .LogToConsole()
                 .Build();
 
