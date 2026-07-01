@@ -1,5 +1,3 @@
-using Aspire.Hosting;
-using k8s.Models;
 using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
