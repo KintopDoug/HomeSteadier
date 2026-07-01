@@ -36,7 +36,7 @@ public class DotnetService
             foreach (var table in tables)
             {
                 // Skip DbUp's internal schema tracking table
-                if (table.TableName.Equals("schemaversions", StringComparison.OrdinalIgnoreCase))
+                if (table.TableName.Equals("migrations", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 var columns = await GetTableColumnsAsync(connection, table.SchemaName, table.TableName);

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var sharedConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.shared.json");
+var sharedConfigPath = GetSharedConfigPath();
 builder.Configuration.AddJsonFile(sharedConfigPath, optional: true);
 
 builder.AddServiceDefaults();
@@ -94,6 +94,24 @@ async Task RunDatabaseMigrations(IServiceProvider services, IConfiguration confi
         logger.LogError(ex, "Error running database migrations");
         throw;
     }
+}
+
+string GetSharedConfigPath()
+{
+    var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
+    return Path.Combine(solutionRoot, "appsettings.shared.json");
+}
+
+string FindSolutionRoot(string startPath)
+{
+    var dir = new DirectoryInfo(startPath);
+    while (dir != null)
+    {
+        if (File.Exists(Path.Combine(dir.FullName, "HomeSteadier.slnx")))
+            return dir.FullName;
+        dir = dir.Parent;
+    }
+    return startPath;
 }
 
 string BuildConnectionString(IConfiguration configuration)

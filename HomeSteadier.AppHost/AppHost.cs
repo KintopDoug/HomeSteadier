@@ -2,7 +2,7 @@ using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var sharedConfigPath = Path.Combine(AppContext.BaseDirectory, "appsettings.shared.json");
+var sharedConfigPath = GetSharedConfigPath();
 builder.Configuration.AddJsonFile(sharedConfigPath, optional: false);
 
 // Read values from configuration
@@ -33,7 +33,8 @@ var postgres = builder.AddPostgres("pgsql", password: postgresPassword)
 var db = postgres.AddDatabase(databaseName);
 
 var api = builder.AddProject<Projects.Homesteadier_API>(projectName)
-            .WithReference(db);
+            .WithReference(db)
+            .WaitFor(db);
 
 builder.AddJavaScriptApp("react-frontend", "../ReactApp")
     .WithReference(api)
@@ -46,3 +47,21 @@ builder.AddJavaScriptApp("react-frontend", "../ReactApp")
 
 
 builder.Build().Run();
+
+string GetSharedConfigPath()
+{
+    var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
+    return Path.Combine(solutionRoot, "appsettings.shared.json");
+}
+
+string FindSolutionRoot(string startPath)
+{
+    var dir = new DirectoryInfo(startPath);
+    while (dir != null)
+    {
+        if (File.Exists(Path.Combine(dir.FullName, "HomeSteadier.slnx")))
+            return dir.FullName;
+        dir = dir.Parent;
+    }
+    return startPath;
+}
