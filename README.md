@@ -113,4 +113,5 @@ npm run dev
 
 ## Documentation
 
+- [CLI Documentation](docs/CLI.md) — Admin tool for local development
 - [Aspire Troubleshooting Guide](docs/ASPIRE-TROUBLESHOOTING.md) — Solutions for common Aspire and Docker issues
