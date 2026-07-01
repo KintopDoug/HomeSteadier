@@ -70,6 +70,9 @@ public class DotnetService
                     await File.WriteAllTextAsync(implementationFilePath, implementationCode);
                     Console.WriteLine($"Generated: {className}Repository.cs");
                 }
+
+                // Update DbContext with new entity
+                await UpdateDbContextAsync(className, columns);
             }
 
             Console.ForegroundColor = ConsoleColor.Green;
@@ -279,6 +282,79 @@ public class DotnetService
             dir = dir.Parent;
         }
         return startPath;
+    }
+
+    private async Task UpdateDbContextAsync(string className, List<(string Name, string SqlType, bool IsNullable)> columns)
+    {
+        var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
+        var dbContextPath = Path.Combine(solutionRoot, "Homesteadier.Repository", "HomesteadierDbContext.cs");
+
+        if (!File.Exists(dbContextPath))
+            return;
+
+        var content = await File.ReadAllTextAsync(dbContextPath);
+        var pluralName = className + "s";
+
+        // Check if entity already exists in DbContext
+        if (content.Contains($"DbSet<{className}>"))
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"Skipped: {className} already in DbContext");
+            Console.ResetColor();
+            return;
+        }
+
+        // Add DbSet property
+        var dbSetLine = $"    public DbSet<{className}> {pluralName} {{ get; set; }}";
+        var userDbSetIndex = content.IndexOf("public DbSet<User> Users");
+        if (userDbSetIndex >= 0)
+        {
+            var endOfLine = content.IndexOf("\n", userDbSetIndex);
+            content = content.Insert(endOfLine + 1, dbSetLine + "\n");
+        }
+
+        // Add entity configuration in OnModelCreating
+        var configTemplate = GenerateDbContextConfiguration(className, pluralName, columns);
+        var lastConfigIndex = content.LastIndexOf("        });");
+        if (lastConfigIndex >= 0)
+        {
+            var insertPosition = content.IndexOf("\n", lastConfigIndex) + 1;
+            content = content.Insert(insertPosition, "\n" + configTemplate);
+        }
+
+        await File.WriteAllTextAsync(dbContextPath, content);
+        Console.WriteLine($"Updated DbContext with {className}");
+    }
+
+    private string GenerateDbContextConfiguration(string className, string pluralName, List<(string Name, string SqlType, bool IsNullable)> columns)
+    {
+        var tableName = ToCamelCase(pluralName);
+        var config = $"        modelBuilder.Entity<{className}>(entity =>\n" +
+                     $"        {{\n" +
+                     $"            entity.ToTable(\"{tableName}\");\n" +
+                     $"            entity.HasKey(e => e.Id);\n\n";
+
+        foreach (var column in columns)
+        {
+            var propertyName = ToPascalCase(column.Name);
+            var columnName = column.Name;
+            config += $"            entity.Property(e => e.{propertyName})\n" +
+                     $"                .HasColumnName(\"{columnName}\")";
+
+            if (column.Name != "id" && !column.IsNullable)
+                config += "\n                .IsRequired()";
+
+            config += ";\n\n";
+        }
+
+        config += "        });";
+        return config;
+    }
+
+    private string ToCamelCase(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        return char.ToLowerInvariant(text[0]) + text[1..];
     }
 
     private string GetConnectionString(IConfiguration configuration)
