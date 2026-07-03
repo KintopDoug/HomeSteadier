@@ -1,59 +1,59 @@
+using System;
+using System.Collections.Generic;
 using HomeSteadier.Models.Database;
 using Microsoft.EntityFrameworkCore;
 
 namespace Homesteadier.Repository;
 
-public class HomesteadierDbContext : DbContext
+public partial class HomesteadierDbContext : DbContext
 {
     public HomesteadierDbContext(DbContextOptions<HomesteadierDbContext> options)
         : base(options)
     {
     }
 
-
-    public DbSet<User> Users { get; set; }
+    public virtual DbSet<User> Users { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        base.OnModelCreating(modelBuilder);
-
-
         modelBuilder.Entity<User>(entity =>
         {
+            entity.HasKey(e => e.Id).HasName("users_pkey");
+
             entity.ToTable("users");
-            entity.HasKey(e => e.Id);
 
-            entity.Property(e => e.Id)
-                .HasColumnName("id");
+            entity.HasIndex(e => e.Email, "ix_users_email");
 
-            entity.Property(e => e.Email)
-                .HasColumnName("email")
-                .IsRequired();
+            entity.HasIndex(e => e.Email, "users_email_key").IsUnique();
 
-            entity.Property(e => e.Password)
-                .HasColumnName("password")
-                .IsRequired();
-
-            entity.Property(e => e.FirstName)
-                .HasColumnName("first_name")
-                .IsRequired();
-
-            entity.Property(e => e.LastName)
-                .HasColumnName("last_name")
-                .IsRequired();
-
+            entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.CreatedAt)
-                .HasColumnName("created_at")
-                .IsRequired();
-
-            entity.Property(e => e.UpdatedAt)
-                .HasColumnName("updated_at")
-                .IsRequired();
-
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Email)
+                .HasMaxLength(255)
+                .HasColumnName("email");
+            entity.Property(e => e.FirstName)
+                .HasMaxLength(100)
+                .HasColumnName("first_name");
             entity.Property(e => e.IsActive)
-                .HasColumnName("is_active")
-                .IsRequired();
-
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.LastName)
+                .HasMaxLength(100)
+                .HasColumnName("last_name");
+            entity.Property(e => e.Password)
+                .HasMaxLength(255)
+                .HasColumnName("password");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("updated_at");
         });
+
+        OnModelCreatingPartial(modelBuilder);
     }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }

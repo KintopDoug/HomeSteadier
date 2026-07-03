@@ -1,5 +1,6 @@
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
-using Npgsql;
 
 namespace HomeSteadier.CLI.Services;
 
@@ -10,73 +11,132 @@ public class DotnetService
         try
         {
             var connectionString = GetConnectionString(configuration);
-            Console.WriteLine("Generating entity models from database schema...");
+            Console.WriteLine("Generating entity models from database schema using EF Core scaffolding...");
 
-            using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
-            Console.WriteLine("Connected to database.");
+            var modelsPath = GetModelsPath();
+            var repositoriesPath = GetRepositoriesPath();
 
-            var tables = await GetUserDefinedTablesAsync(connection);
+            Console.WriteLine($"Generating models to: {modelsPath}");
+            Console.WriteLine($"Generating repositories to: {repositoriesPath}");
 
-            if (tables.Count == 0)
+            // Ensure directories exist
+            Directory.CreateDirectory(modelsPath);
+            Directory.CreateDirectory(repositoriesPath);
+
+            var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
+            var repositoryProjectPath = Path.Combine(solutionRoot, "Homesteadier.Repository");
+
+            // Scaffold entities into an isolated temp folder so pre-existing project files
+            // (Repository.cs, IRepository.cs, AutoRegisterAttribute.cs, etc.) are never mistaken
+            // for generated output. Only the DbContext is written directly into the project.
+            const string tempFolderName = "_ScaffoldTemp";
+            var tempOutputPath = Path.Combine(repositoryProjectPath, tempFolderName);
+
+            if (Directory.Exists(tempOutputPath))
+                Directory.Delete(tempOutputPath, recursive: true);
+            Directory.CreateDirectory(tempOutputPath);
+
+            // Run EF Core scaffolding via dotnet ef command
+            // Note: Must run from Repository project directory where EF Core Design package is installed
+            var scaffoldProcess = new ProcessStartInfo
             {
-                Console.WriteLine("No user-defined tables found.");
+                FileName = "dotnet",
+                Arguments = $"ef dbcontext scaffold \"{connectionString}\" Npgsql.EntityFrameworkCore.PostgreSQL " +
+                           $"--output-dir {tempFolderName} " +
+                           $"--context HomesteadierDbContext " +
+                           $"--context-dir . " +
+                           $"--namespace HomeSteadier.Models.Database " +
+                           $"--context-namespace Homesteadier.Repository " +
+                           $"--force " +
+                           $"--no-onconfiguring",
+                WorkingDirectory = repositoryProjectPath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            Console.WriteLine($"Running scaffolding from: {repositoryProjectPath}");
+
+            using var process = Process.Start(scaffoldProcess);
+            if (process == null)
+                throw new InvalidOperationException("Failed to start scaffolding process");
+
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+
+            await process.WaitForExitAsync();
+
+            Console.WriteLine(output);
+
+            if (process.ExitCode != 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"\nScaffolding failed with exit code {process.ExitCode}");
+                if (!string.IsNullOrEmpty(error))
+                {
+                    Console.WriteLine("\n=== Error Output ===");
+                    Console.WriteLine(error);
+                    Console.WriteLine("=== End Error Output ===\n");
+                }
+                Console.ResetColor();
+                if (Directory.Exists(tempOutputPath))
+                    Directory.Delete(tempOutputPath, recursive: true);
                 return;
             }
 
-            var modelsPath = GetModelsPath();
-            Console.WriteLine($"Generating models to: {modelsPath}");
+            // Move generated models from the isolated temp folder to the Models project
+            var skippedEntities = MoveGeneratedModels(tempOutputPath, modelsPath);
 
-            var repositoriesPath = GetRepositoriesPath();
-            Console.WriteLine($"Generating repositories to: {repositoriesPath}");
+            if (Directory.Exists(tempOutputPath))
+                Directory.Delete(tempOutputPath, recursive: true);
 
+            // Strip references to skipped entities (e.g. DbUp's migrations table) from the
+            // freshly scaffolded DbContext, since no model file exists for them.
+            if (skippedEntities.Count > 0)
+            {
+                var dbContextPath = Path.Combine(repositoryProjectPath, "HomesteadierDbContext.cs");
+                await RemoveEntitiesFromDbContextAsync(dbContextPath, skippedEntities);
+            }
+
+            // Get list of generated entity files
+            var generatedEntities = GetGeneratedEntities(modelsPath);
+
+            Console.WriteLine($"Generated {generatedEntities.Count} entity model(s)");
+
+            // Generate repositories for each entity
             var generatedCount = 0;
             var skippedRepositories = new List<string>();
 
-            foreach (var table in tables)
+            foreach (var entityName in generatedEntities)
             {
-                // Skip DbUp's internal schema tracking table
-                if (table.TableName.Equals("migrations", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var columns = await GetTableColumnsAsync(connection, table.SchemaName, table.TableName);
-                var className = ToPascalCase(Singularize(table.TableName));
-                var classCode = GenerateEntityClass(className, columns);
-
-                var filePath = Path.Combine(modelsPath, $"{className}.cs");
-                await File.WriteAllTextAsync(filePath, classCode);
-                Console.WriteLine($"Generated: {className}.cs");
-                generatedCount++;
-
-                // Generate repository interface and implementation
-                var interfaceFilePath = Path.Combine(repositoriesPath, $"I{className}Repository.cs");
-                var implementationFilePath = Path.Combine(repositoriesPath, $"{className}Repository.cs");
+                var interfaceFilePath = Path.Combine(repositoriesPath, $"I{entityName}Repository.cs");
+                var implementationFilePath = Path.Combine(repositoriesPath, $"{entityName}Repository.cs");
 
                 if (File.Exists(interfaceFilePath) || File.Exists(implementationFilePath))
                 {
-                    skippedRepositories.Add(className);
+                    skippedRepositories.Add(entityName);
                     Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine($"Skipped: I{className}Repository.cs (already exists)");
+                    Console.WriteLine($"Skipped: I{entityName}Repository.cs (already exists)");
                     Console.ResetColor();
                 }
                 else
                 {
-                    var interfaceCode = GenerateRepositoryInterface(className);
-                    var implementationCode = GenerateRepositoryImplementation(className);
+                    var interfaceCode = GenerateRepositoryInterface(entityName);
+                    var implementationCode = GenerateRepositoryImplementation(entityName);
 
                     await File.WriteAllTextAsync(interfaceFilePath, interfaceCode);
-                    Console.WriteLine($"Generated: I{className}Repository.cs");
+                    Console.WriteLine($"Generated: {interfaceFilePath}");
 
                     await File.WriteAllTextAsync(implementationFilePath, implementationCode);
-                    Console.WriteLine($"Generated: {className}Repository.cs");
-                }
+                    Console.WriteLine($"Generated: {implementationFilePath}");
 
-                // Update DbContext with new entity
-                await UpdateDbContextAsync(className, columns);
+                    generatedCount++;
+                }
             }
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"\nSuccessfully generated {generatedCount} model(s) and repositories!");
+            Console.WriteLine($"\nSuccessfully generated {generatedEntities.Count} model(s), {generatedCount} repository/repositories, and DbContext!");
             if (skippedRepositories.Count > 0)
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
@@ -88,139 +148,121 @@ public class DotnetService
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error generating models: {ex.Message}");
+            if (ex.InnerException != null)
+                Console.WriteLine($"Inner error: {ex.InnerException.Message}");
             Console.ResetColor();
         }
     }
 
-    private async Task<List<(string SchemaName, string TableName)>> GetUserDefinedTablesAsync(NpgsqlConnection connection)
+    private List<string> MoveGeneratedModels(string sourceDir, string targetDir)
     {
-        var tables = new List<(string, string)>();
+        var skippedEntities = new List<string>();
 
-        const string query = """
-            SELECT table_schema, table_name
-            FROM information_schema.tables
-            WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-              AND table_type = 'BASE TABLE'
-            ORDER BY table_name
-            """;
+        if (!Directory.Exists(sourceDir))
+            return skippedEntities;
 
-        using var cmd = new NpgsqlCommand(query, connection);
-        using var reader = await cmd.ExecuteReaderAsync();
-
-        while (await reader.ReadAsync())
+        // Find all .cs files that are entity models (not DbContext files)
+        var files = Directory.GetFiles(sourceDir, "*.cs");
+        foreach (var file in files)
         {
-            tables.Add((reader.GetString(0), reader.GetString(1)));
+            var fileName = Path.GetFileName(file);
+            var className = Path.GetFileNameWithoutExtension(file);
+
+            // Skip DbContext files - they stay in Repository
+            if (fileName.Contains("DbContext"))
+                continue;
+
+            // Skip migrations table model - it's managed by DbUp, not EF Core
+            if (fileName.Contains("Migration", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"Skipped: {fileName} (DbUp-managed table)");
+                Console.ResetColor();
+                skippedEntities.Add(className);
+                try
+                {
+                    File.Delete(file);
+                }
+                catch { /* Ignore deletion errors */ }
+                continue;
+            }
+
+            var targetPath = Path.Combine(targetDir, fileName);
+            try
+            {
+                // Move the file to Models directory
+                if (File.Exists(targetPath))
+                    File.Delete(targetPath);
+
+                File.Move(file, targetPath);
+                Console.WriteLine($"Moved {fileName} to models directory");
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"Warning: Could not move {fileName}: {ex.Message}");
+                Console.ResetColor();
+            }
         }
 
-        return tables;
+        return skippedEntities;
     }
 
-    private async Task<List<(string Name, string SqlType, bool IsNullable)>> GetTableColumnsAsync(NpgsqlConnection connection, string schemaName, string tableName)
+    private async Task RemoveEntitiesFromDbContextAsync(string dbContextPath, List<string> entityClassNames)
     {
-        var columns = new List<(string, string, bool)>();
+        if (!File.Exists(dbContextPath))
+            return;
 
-        const string query = """
-            SELECT
-                column_name,
-                udt_name,
-                is_nullable,
-                ordinal_position
-            FROM information_schema.columns
-            WHERE table_schema = @schema AND table_name = @table
-            ORDER BY ordinal_position
-            """;
+        var content = await File.ReadAllTextAsync(dbContextPath);
+        var modified = false;
 
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@schema", schemaName);
-        cmd.Parameters.AddWithValue("@table", tableName);
-
-        using var reader = await cmd.ExecuteReaderAsync();
-
-        while (await reader.ReadAsync())
+        foreach (var entityClassName in entityClassNames)
         {
-            var columnName = reader.GetString(0);
-            var sqlType = reader.GetString(1);
-            var isNullable = reader.GetString(2) == "YES";
+            // Remove the DbSet<{Entity}> property declaration line
+            var dbSetPattern = $@"[ \t]*public virtual DbSet<{Regex.Escape(entityClassName)}>.*\r?\n\r?\n?";
+            var newContent = Regex.Replace(content, dbSetPattern, string.Empty);
+            if (newContent != content)
+            {
+                content = newContent;
+                modified = true;
+            }
 
-            columns.Add((columnName, sqlType, isNullable));
+            // Remove the modelBuilder.Entity<{Entity}>(entity => { ... }); configuration block
+            var configPattern = $@"[ \t]*modelBuilder\.Entity<{Regex.Escape(entityClassName)}>\(entity =>\s*\{{.*?\}}\);\r?\n\r?\n?";
+            newContent = Regex.Replace(content, configPattern, string.Empty, RegexOptions.Singleline);
+            if (newContent != content)
+            {
+                content = newContent;
+                modified = true;
+            }
         }
 
-        return columns;
-    }
-
-    private string GenerateEntityClass(string className, List<(string Name, string SqlType, bool IsNullable)> columns)
-    {
-        var properties = string.Join(Environment.NewLine,
-            columns.Select(c => GenerateProperty(c.Name, c.SqlType, c.IsNullable)));
-
-        return "namespace HomeSteadier.Models.Database;\n\n" +
-               $"public class {className}\n" +
-               "{\n" +
-               properties + "\n" +
-               "}";
-    }
-
-    private string GenerateProperty(string columnName, string sqlType, bool isNullable)
-    {
-        var cSharpType = MapSqlTypeToCSharp(sqlType, isNullable);
-        var propertyName = ToPascalCase(columnName);
-
-        return $"    public {cSharpType} {propertyName} {{ get; set; }}";
-    }
-
-    private string MapSqlTypeToCSharp(string sqlType, bool isNullable)
-    {
-        var baseType = sqlType.ToLowerInvariant() switch
+        if (modified)
         {
-            "int4" or "serial" => "int",
-            "int8" or "bigserial" => "long",
-            "bool" => "bool",
-            "timestamp" or "timestamptz" => "DateTime",
-            "varchar" or "text" or "bpchar" => "string",
-            "uuid" => "Guid",
-            "numeric" or "decimal" => "decimal",
-            "float4" => "float",
-            "float8" => "double",
-            "date" => "DateOnly",
-            "time" or "timetz" => "TimeOnly",
-            _ => "string"
-        };
-
-        if (isNullable && (baseType == "string" || baseType == "Guid"))
-            return $"{baseType}?";
-
-        if (isNullable && baseType != "string" && baseType != "Guid")
-            return $"{baseType}?";
-
-        return baseType;
+            await File.WriteAllTextAsync(dbContextPath, content);
+            Console.WriteLine($"Removed DbUp-managed entity reference(s) from DbContext: {string.Join(", ", entityClassNames)}");
+        }
     }
 
-    private string ToPascalCase(string text)
+    private List<string> GetGeneratedEntities(string modelsPath)
     {
-        if (string.IsNullOrEmpty(text)) return text;
+        var entities = new List<string>();
 
-        // If text contains underscores, split and capitalize each part
-        if (text.Contains('_'))
+        if (!Directory.Exists(modelsPath))
+            return entities;
+
+        var files = Directory.GetFiles(modelsPath, "*.cs");
+        foreach (var file in files)
         {
-            var parts = text.Split('_');
-            return string.Concat(parts.Select(p =>
-                char.ToUpperInvariant(p[0]) + (p.Length > 1 ? p[1..].ToLowerInvariant() : string.Empty)));
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            // Skip DbContext files
+            if (!fileName.Contains("DbContext"))
+            {
+                entities.Add(fileName);
+            }
         }
 
-        // If already in mixed case (e.g., FirstName, IsActive), just capitalize first letter
-        return char.ToUpperInvariant(text[0]) + text[1..];
-    }
-
-    private string Singularize(string plural)
-    {
-        if (plural.EndsWith("ies", StringComparison.OrdinalIgnoreCase))
-            return plural[..^3] + "y";
-        if (plural.EndsWith("es", StringComparison.OrdinalIgnoreCase))
-            return plural[..^2];
-        if (plural.EndsWith("s", StringComparison.OrdinalIgnoreCase))
-            return plural[..^1];
-
-        return plural;
+        return entities;
     }
 
     private string GenerateRepositoryInterface(string className)
@@ -282,117 +324,6 @@ public class DotnetService
             dir = dir.Parent;
         }
         return startPath;
-    }
-
-    private async Task UpdateDbContextAsync(string className, List<(string Name, string SqlType, bool IsNullable)> columns)
-    {
-        try
-        {
-            var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
-            var dbContextPath = Path.Combine(solutionRoot, "Homesteadier.Repository", "HomesteadierDbContext.cs");
-
-            if (!File.Exists(dbContextPath))
-            {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"DbContext not found at: {dbContextPath}");
-                Console.ResetColor();
-                return;
-            }
-
-            var content = await File.ReadAllTextAsync(dbContextPath);
-            var pluralName = Pluralize(className);
-
-            // Check if entity already exists in DbContext (either DbSet or configuration)
-            if (content.Contains($"DbSet<{className}>") || content.Contains($"modelBuilder.Entity<{className}>"))
-            {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"Skipped: {className} already in DbContext");
-                Console.ResetColor();
-                return;
-            }
-
-            var modified = false;
-
-            // Add DbSet property before OnModelCreating method
-            var dbSetLine = $"    public DbSet<{className}> {pluralName} {{ get; set; }}";
-            var onModelCreatingIndex = content.IndexOf("protected override void OnModelCreating");
-            if (onModelCreatingIndex >= 0)
-            {
-                var lineStart = content.LastIndexOf("\n", onModelCreatingIndex) + 1;
-                content = content.Insert(lineStart, dbSetLine + Environment.NewLine + Environment.NewLine);
-                modified = true;
-            }
-
-            // Add entity configuration before the closing brace of OnModelCreating only if it doesn't exist
-            if (!content.Contains($"modelBuilder.Entity<{className}>"))
-            {
-                var configTemplate = GenerateDbContextConfiguration(className, pluralName, columns);
-                var methodStart = content.IndexOf("protected override void OnModelCreating");
-                if (methodStart >= 0)
-                {
-                    // Find the closing brace of OnModelCreating method (indented with 4 spaces)
-                    var closingBracePattern = Environment.NewLine + "    }";
-                    var closingBraceIndex = content.IndexOf(closingBracePattern, methodStart);
-                    if (closingBraceIndex >= 0)
-                    {
-                        content = content.Insert(closingBraceIndex, Environment.NewLine + Environment.NewLine + configTemplate);
-                        modified = true;
-                    }
-                }
-            }
-
-            if (modified)
-            {
-                await File.WriteAllTextAsync(dbContextPath, content);
-                Console.WriteLine($"Updated DbContext with {className}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error updating DbContext: {ex.Message}");
-            Console.ResetColor();
-        }
-    }
-
-    private string Pluralize(string singular)
-    {
-        if (singular.EndsWith("y"))
-            return singular[..^1] + "ies";
-        if (singular.EndsWith("s") || singular.EndsWith("x") || singular.EndsWith("z"))
-            return singular + "es";
-        return singular + "s";
-    }
-
-    private string GenerateDbContextConfiguration(string className, string pluralName, List<(string Name, string SqlType, bool IsNullable)> columns)
-    {
-        var tableName = ToCamelCase(pluralName);
-        var config = $"        modelBuilder.Entity<{className}>(entity =>\n" +
-                     $"        {{\n" +
-                     $"            entity.ToTable(\"{tableName}\");\n" +
-                     $"            entity.HasKey(e => e.Id);\n\n";
-
-        foreach (var column in columns)
-        {
-            var propertyName = ToPascalCase(column.Name);
-            var columnName = column.Name;
-            config += $"            entity.Property(e => e.{propertyName})\n" +
-                     $"                .HasColumnName(\"{columnName}\")";
-
-            if (column.Name != "id" && !column.IsNullable)
-                config += "\n                .IsRequired()";
-
-            config += ";\n\n";
-        }
-
-        config += "        });";
-        return config;
-    }
-
-    private string ToCamelCase(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return text;
-        return char.ToLowerInvariant(text[0]) + text[1..];
     }
 
     private string GetConnectionString(IConfiguration configuration)
