@@ -90,8 +90,10 @@ string FindSolutionRoot(string startPath)
 void PrintHelp()
 {
     Console.WriteLine("Available commands:");
-    Console.WriteLine("  database update    Run pending migrations");
-    Console.WriteLine("  dotnet gen         Generate entity models from database schema");
+    Console.WriteLine("  database update    Run pending DbUp migrations");
+    Console.WriteLine("  dotnet gen         Scaffold entity models + DbContext from the database schema,");
+    Console.WriteLine("                     then generate repositories for any new entities");
+    Console.WriteLine("                     (existing repositories are skipped, not overwritten)");
     Console.WriteLine("  help               Show this help message");
     Console.WriteLine("  exit               Exit the CLI");
 }
