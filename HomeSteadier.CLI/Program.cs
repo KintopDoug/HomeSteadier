@@ -57,6 +57,10 @@ async Task ProcessCommand(string[] parts, DatabaseService databaseService, Dotne
             await databaseService.RunMigrationsAsync(configuration);
             break;
 
+        case ["database", "gen"]:
+            await databaseService.GenerateTableScriptsAsync(configuration);
+            break;
+
         case ["dotnet", "gen"] or ["gen"]:
             await dotnetService.GenerateModelsAsync(configuration);
             break;
@@ -91,6 +95,8 @@ void PrintHelp()
 {
     Console.WriteLine("Available commands:");
     Console.WriteLine("  database update    Run pending DbUp migrations");
+    Console.WriteLine("  database gen       Create/update a CREATE TABLE script per table in");
+    Console.WriteLine("                     HomeSteadier.Database/Tables from the live schema");
     Console.WriteLine("  dotnet gen         Scaffold entity models + DbContext from the database schema,");
     Console.WriteLine("                     then generate repositories for any new entities");
     Console.WriteLine("                     (existing repositories are skipped, not overwritten)");
