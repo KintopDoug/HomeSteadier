@@ -1,27 +1,25 @@
-import { useState } from "react";
+import { useMemo } from "react";
+import { observer } from "mobx-react-lite";
+import { SignUpViewModel } from "../viewModels/SignUpViewModel";
 
-export const SignUp = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-
-  function handleSubmit(e: React.FormEvent) {
-    // Not wired to the API yet — the create-user endpoint doesn't exist yet.
-    e.preventDefault();
-  }
+export const SignUp = observer(() => {
+  const viewModel = useMemo(() => {
+    const vm = new SignUpViewModel();
+    vm.initialize();
+    return vm;
+  }, []);
 
   return (
     <div className="signup-page">
-      <form className="signup-form" onSubmit={handleSubmit}>
+      <form className="signup-form" onSubmit={viewModel.handleSubmit}>
         <h1>Sign Up</h1>
 
         <label htmlFor="email">Email</label>
         <input
           id="email"
           type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          value={viewModel.email}
+          onChange={(e) => viewModel.setEmail(e.target.value)}
           required
         />
 
@@ -29,8 +27,8 @@ export const SignUp = () => {
         <input
           id="password"
           type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          value={viewModel.password}
+          onChange={(e) => viewModel.setPassword(e.target.value)}
           required
         />
 
@@ -38,8 +36,8 @@ export const SignUp = () => {
         <input
           id="firstName"
           type="text"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
+          value={viewModel.firstName}
+          onChange={(e) => viewModel.setFirstName(e.target.value)}
           required
         />
 
@@ -47,8 +45,8 @@ export const SignUp = () => {
         <input
           id="lastName"
           type="text"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
+          value={viewModel.lastName}
+          onChange={(e) => viewModel.setLastName(e.target.value)}
           required
         />
 
@@ -56,4 +54,4 @@ export const SignUp = () => {
       </form>
     </div>
   );
-};
+});

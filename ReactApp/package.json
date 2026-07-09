@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@tanstack/react-router": "^1.170.17",
+    "mobx": "^6.16.1",
+    "mobx-react-lite": "^4.1.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
