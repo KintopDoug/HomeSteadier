@@ -40,7 +40,7 @@ while (true)
     Console.WriteLine();
 }
 
-async Task ProcessCommand(string[] parts, DatabaseService databaseService, DotnetService modelGenerationService, IConfiguration configuration)
+async Task ProcessCommand(string[] parts, DatabaseService databaseService, DotnetService dotnetService, IConfiguration configuration)
 {
     switch (parts)
     {
@@ -58,7 +58,7 @@ async Task ProcessCommand(string[] parts, DatabaseService databaseService, Dotne
             break;
 
         case ["dotnet", "gen"] or ["gen"]:
-            await modelGenerationService.GenerateModelsAsync(configuration);
+            await dotnetService.GenerateModelsAsync(configuration);
             break;
 
         default:
