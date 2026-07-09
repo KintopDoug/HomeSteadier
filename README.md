@@ -6,7 +6,11 @@ A distributed application built with .NET Aspire, featuring a .NET Core API back
 
 - **Homesteadier.API** — ASP.NET Core API with OpenAPI/Swagger support
 - **HomeSteadier.AppHost** — .NET Aspire orchestration host for managing services
+- **HomeSteadier.CLI** — Interactive command-line tool for database migrations and other admin tasks
+- **HomeSteadier.Database** — Database migration service and EF Core migration runner
+- **HomeSteadier.Migrations** — EF Core migrations for the PostgreSQL database
 - **HomeSteadier.Models** — Shared domain models and entities (class library)
+- **Homesteadier.Repository** — Data access layer with repository pattern and EF Core `DbContext`
 - **HomeSteadier.ServiceDefaults** — Shared service configuration and defaults
 - **ReactApp** — React frontend (TypeScript + Vite)
 
