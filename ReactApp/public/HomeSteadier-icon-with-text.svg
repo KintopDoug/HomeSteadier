@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="200" viewBox="0 0 560 200">
+  <g transform="translate(30,30)">
+    <circle cx="52" cy="80" r="8" fill="none" stroke="#C7742F" stroke-width="4"></circle>
+    <circle cx="52" cy="60" r="30" fill="none" stroke="#C7742F" stroke-width="4"></circle>
+    <circle cx="26" cy="50" r="20" fill="none" stroke="#C7742F" stroke-width="4"></circle>
+    <polygon points="6,50 -6,46 6,42" fill="#C7742F"></polygon>
+    <circle cx="19" cy="44" r="2.5" fill="#C7742F"></circle>
+    <ellipse cx="104" cy="96" rx="18" ry="24" fill="none" stroke="#6B7F4B" stroke-width="4"></ellipse>
+    <circle cx="100" cy="20" r="12" fill="none" stroke="#D9A441" stroke-width="4"></circle>
+    <line x1="100" y1="2" x2="100" y2="-6" stroke="#D9A441" stroke-width="4"></line>
+    <line x1="118" y1="20" x2="126" y2="20" stroke="#D9A441" stroke-width="4"></line>
+    <line x1="112" y1="6" x2="118" y2="0" stroke="#D9A441" stroke-width="4"></line>
+  </g>
+  <text x="270" y="100" font-family="Lora, serif" font-weight="600" font-size="42" fill="#33301F">HomeSteadier</text>
+  <text x="272" y="128" font-family="Public Sans, sans-serif" font-size="14" letter-spacing="2.5" fill="#6B7F4B">HOBBY FARM MANAGEMENT</text>
+</svg>
