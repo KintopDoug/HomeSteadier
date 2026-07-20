@@ -22,11 +22,16 @@ public partial class HomesteadierDbContext : DbContext
 
             entity.ToTable("users");
 
+            entity.HasIndex(e => e.ClerkUserId, "ix_users_clerk_user_id").IsUnique();
+
             entity.HasIndex(e => e.Email, "ix_users_email");
 
             entity.HasIndex(e => e.Email, "users_email_key").IsUnique();
 
             entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.ClerkUserId)
+                .HasMaxLength(255)
+                .HasColumnName("clerk_user_id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("timestamp without time zone")
@@ -43,9 +48,6 @@ public partial class HomesteadierDbContext : DbContext
             entity.Property(e => e.LastName)
                 .HasMaxLength(100)
                 .HasColumnName("last_name");
-            entity.Property(e => e.Password)
-                .HasMaxLength(255)
-                .HasColumnName("password");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("timestamp without time zone")
