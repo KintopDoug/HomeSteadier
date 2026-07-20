@@ -1,7 +1,10 @@
 
 using HomeSteadier.Database;
+using HomeSteadier.Models.Security;
 using Homesteadier.Repository;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +19,48 @@ builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
+
+// Configure Clerk authentication. Clerk issues standard RS256 JWTs; the API validates
+// them against Clerk's JWKS (fetched from the Authority) with no Clerk-specific SDK.
+var clerkAuthority = builder.Configuration["Clerk:Authority"]
+    ?? throw new InvalidOperationException("Clerk:Authority not found in configuration.");
+var authorizedParties = builder.Configuration.GetSection("Clerk:AuthorizedParties").Get<string[]>()
+    ?? Array.Empty<string>();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = clerkAuthority;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = clerkAuthority,
+            // Clerk session tokens carry no "aud" claim by default. Defense-in-depth
+            // is provided by the optional "azp" (authorized party) check below, which
+            // is enforced only when Clerk:AuthorizedParties is non-empty (set the real
+            // origin(s) in production; left empty in dev where the frontend port is
+            // dynamic under the Aspire host).
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            NameClaimType = ClaimTypes.Sub.Value(),
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                var azp = context.Principal?.FindFirst(ClaimTypes.Azp.Value())?.Value;
+                if (authorizedParties.Length > 0 &&
+                    (string.IsNullOrEmpty(azp) || !authorizedParties.Contains(azp)))
+                {
+                    context.Fail("Invalid 'azp' (authorized party) claim.");
+                }
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 // Configure DbContext and repositories
 var connectionString = BuildConnectionString(builder.Configuration);
@@ -62,6 +107,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
