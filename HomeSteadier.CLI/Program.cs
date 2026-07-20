@@ -12,6 +12,7 @@ var configuration = new ConfigurationBuilder()
 
 var databaseService = new DatabaseService();
 var modelGenerationService = new DotnetService();
+var packageGenerationService = new PackageGenerationService();
 
 Console.WriteLine("HomeSteadier CLI");
 Console.WriteLine();
@@ -19,7 +20,7 @@ Console.WriteLine();
 // Handle command-line arguments
 if (args.Length > 0)
 {
-    await ProcessCommand(args, databaseService, modelGenerationService, configuration);
+    await ProcessCommand(args, databaseService, modelGenerationService, packageGenerationService, configuration);
     return 0;
 }
 
@@ -35,12 +36,12 @@ while (true)
         continue;
 
     var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-    await ProcessCommand(parts, databaseService, modelGenerationService, configuration);
+    await ProcessCommand(parts, databaseService, modelGenerationService, packageGenerationService, configuration);
 
     Console.WriteLine();
 }
 
-async Task ProcessCommand(string[] parts, DatabaseService databaseService, DotnetService dotnetService, IConfiguration configuration)
+async Task ProcessCommand(string[] parts, DatabaseService databaseService, DotnetService dotnetService, PackageGenerationService packageGenerationService, IConfiguration configuration)
 {
     switch (parts)
     {
@@ -61,8 +62,12 @@ async Task ProcessCommand(string[] parts, DatabaseService databaseService, Dotne
             await databaseService.GenerateTableScriptsAsync(configuration);
             break;
 
-        case ["dotnet", "gen"] or ["gen"]:
+        case ["dotnet", "gen"]:
             await dotnetService.GenerateModelsAsync(configuration);
+            break;
+
+        case ["packages", "gen"]:
+            await packageGenerationService.GenerateAsync(configuration);
             break;
 
         default:
@@ -100,6 +105,8 @@ void PrintHelp()
     Console.WriteLine("  dotnet gen         Scaffold entity models + DbContext from the database schema,");
     Console.WriteLine("                     then generate repositories for any new entities");
     Console.WriteLine("                     (existing repositories are skipped, not overwritten)");
+    Console.WriteLine("  packages gen       Generate TypeScript request/response models in ReactApp/src/models");
+    Console.WriteLine("                     from the API's OpenAPI document (requires the API to be running)");
     Console.WriteLine("  help               Show this help message");
     Console.WriteLine("  exit               Exit the CLI");
 }

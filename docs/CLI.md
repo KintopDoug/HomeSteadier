@@ -114,6 +114,8 @@ Available commands:
   dotnet gen         Scaffold entity models + DbContext from the database schema,
                      then generate repositories for any new entities
                      (existing repositories are skipped, not overwritten)
+  packages gen       Generate TypeScript request/response models in ReactApp/src/models
+                     from the API's OpenAPI document (requires the API to be running)
   help               Show this help message
   exit               Exit the CLI
 ```
@@ -159,3 +161,28 @@ var result = await service.RunMigrationsAsync(connectionString);
 4. Generates a repository interface/implementation pair for each entity that doesn't already have one, using the `Homesteadier.Repository.Repository<T>` / `IRepository<T>` base types.
 
 Because scaffolding fully regenerates `HomesteadierDbContext.cs` on every run, don't hand-edit that file — put custom query logic in the generated repository classes instead, which are preserved across runs.
+
+`packages gen` is implemented in [`HomeSteadier.CLI.Services.PackageGenerationService`](../HomeSteadier.CLI/Services/PackageGenerationService.cs), which fetches the API's OpenAPI document over HTTP and parses it with the [`Microsoft.OpenApi`](https://www.nuget.org/packages/Microsoft.OpenApi) library (the same one `Microsoft.AspNetCore.OpenApi` is built on) — no external codegen tool required.
+
+### `packages gen`
+
+Generates TypeScript models for the request/response schemas exposed by the API's controllers, reading them from the API's OpenAPI document. **The API must already be running** in Development mode (e.g. `dotnet run --project Homesteadier.API`, or via Aspire) — this command fetches its live `/openapi/v1.json`, it doesn't build or introspect the API assembly directly.
+
+```
+> packages gen
+Fetching OpenAPI document from http://localhost:5128/openapi/v1.json...
+Created: User.ts
+
+Successfully generated TypeScript models! (1 created, 0 updated, 0 unchanged)
+```
+
+What happens on each run:
+
+- Every schema referenced by a controller action's request body or response body is classified as a **request** or **response** model based on how it's actually used in the OpenAPI document (not by name), and written as a `.ts` file to `ReactApp/src/models/request/` or `ReactApp/src/models/response/` respectively.
+- If a schema is referenced by a property of another generated schema (nested `$ref`), it's generated too, colocated in the same folder as whatever referenced it — so generated files only ever import from their own folder (`./OtherType`), never across `request`/`response`.
+- Scripts are only rewritten when the generated content actually changes (reported as `Unchanged`), and files for schemas no longer exposed by the API are deleted (reported as `Removed`).
+- Property types are translated from the OpenAPI schema as faithfully as possible, including unioning multi-type properties (e.g. an OpenAPI 3.1 `"type": ["integer", "string"]` becomes `number | string`) and appending `| null` for nullable properties. A property is only marked optional (`?:`) if the OpenAPI schema doesn't list it under `required`.
+
+The base URL defaults to `http://localhost:5128` (the API's default local launch profile) and can be overridden via `Api:BaseUrl` in `appsettings.shared.json`/`appsettings.json`, or the `Api__BaseUrl` environment variable.
+
+Like the other `gen` commands, these files are fully regenerated on each run — don't hand-edit them.
