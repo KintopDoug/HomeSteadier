@@ -108,6 +108,9 @@ public class PackageGenerationService
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"\nSuccessfully generated TypeScript models! ({created.Count} created, {updated.Count} updated, {unchanged.Count} unchanged)");
             Console.ResetColor();
+
+            Console.WriteLine();
+            await GenerateApiClientsAsync(result.Document);
         }
         catch (Exception ex)
         {
@@ -272,6 +275,257 @@ public class PackageGenerationService
     {
         var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
         return Path.Combine(solutionRoot, "ReactApp", "src", "models", subfolder);
+    }
+
+    private static string GetApiClientsPath()
+    {
+        var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
+        return Path.Combine(solutionRoot, "ReactApp", "src", "api");
+    }
+
+    private record ApiOperation(string MethodName, string Route, HttpMethod HttpMethod, OpenApiOperation Operation);
+
+    private static async Task GenerateApiClientsAsync(OpenApiDocument document)
+    {
+        var apiClientsPath = GetApiClientsPath();
+        Directory.CreateDirectory(apiClientsPath);
+
+        var grouped = GroupOperationsByTag(document);
+
+        var created = new List<string>();
+        var updated = new List<string>();
+        var unchanged = new List<string>();
+
+        foreach (var (tag, operations) in grouped)
+        {
+            var className = $"{tag}Api";
+            var content = GenerateApiClient(tag, operations);
+            var filePath = Path.Combine(apiClientsPath, $"{className}.tsx");
+            var isNew = !File.Exists(filePath);
+            var existing = isNew ? null : await File.ReadAllTextAsync(filePath);
+
+            if (existing == content)
+            {
+                unchanged.Add(className);
+                continue;
+            }
+
+            await File.WriteAllTextAsync(filePath, content);
+            (isNew ? created : updated).Add(className);
+        }
+
+        var expectedFileNames = grouped.Keys.Select(tag => $"{tag}Api").ToHashSet();
+        var removed = new List<string>();
+        foreach (var file in Directory.GetFiles(apiClientsPath, "*Api.tsx"))
+        {
+            var name = Path.GetFileNameWithoutExtension(file);
+            if (!expectedFileNames.Contains(name))
+            {
+                File.Delete(file);
+                removed.Add(name);
+            }
+        }
+
+        foreach (var name in created)
+            Console.WriteLine($"Created: {name}.tsx");
+
+        foreach (var name in updated)
+            Console.WriteLine($"Updated: {name}.tsx");
+
+        foreach (var name in removed)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"Removed: {name}.tsx (controller no longer exposed by the API)");
+            Console.ResetColor();
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"Successfully generated TypeScript API clients! ({created.Count} created, {updated.Count} updated, {unchanged.Count} unchanged)");
+        Console.ResetColor();
+    }
+
+    private static SortedDictionary<string, List<ApiOperation>> GroupOperationsByTag(OpenApiDocument document)
+    {
+        var grouped = new SortedDictionary<string, List<ApiOperation>>(StringComparer.Ordinal);
+
+        foreach (var (route, pathItem) in document.Paths)
+        {
+            if (pathItem.Operations == null)
+                continue;
+
+            foreach (var (httpMethod, operation) in pathItem.Operations)
+            {
+                var tag = operation.Tags?.FirstOrDefault()?.Name;
+                if (string.IsNullOrEmpty(tag))
+                    continue;
+
+                // Reliable thanks to the OperationId operation transformer registered in
+                // Homesteadier.API's AddOpenApi() call, which sets it to the controller
+                // action name. This fallback only kicks in if that ever regresses.
+                var methodName = string.IsNullOrEmpty(operation.OperationId)
+                    ? $"{httpMethod.Method}{route.Replace("/", "_")}"
+                    : operation.OperationId;
+
+                if (!grouped.TryGetValue(tag, out var list))
+                    grouped[tag] = list = [];
+
+                list.Add(new ApiOperation(methodName, route, httpMethod, operation));
+            }
+        }
+
+        return grouped;
+    }
+
+    private static string GenerateApiClient(string tag, List<ApiOperation> operations)
+    {
+        var className = $"{tag}Api";
+        var clientClassName = $"{tag}ApiClient";
+
+        var requestImports = new SortedSet<string>();
+        var responseImports = new SortedSet<string>();
+        var methodBlocks = operations
+            .OrderBy(o => o.MethodName, StringComparer.Ordinal)
+            .Select(op => GenerateMethod(op, requestImports, responseImports))
+            .ToList();
+
+        var content = new System.Text.StringBuilder();
+        content.AppendLine("// Auto-generated by 'packages gen' from the API's OpenAPI document. Do not hand-edit.");
+        content.AppendLine("import { httpClient } from \"./httpClient\";");
+        foreach (var import in requestImports)
+            content.AppendLine($"import type {{ {import} }} from \"../models/request/{import}\";");
+        foreach (var import in responseImports)
+            content.AppendLine($"import type {{ {import} }} from \"../models/response/{import}\";");
+        content.AppendLine();
+        content.AppendLine($"class {clientClassName} {{");
+        for (var i = 0; i < methodBlocks.Count; i++)
+        {
+            content.Append(methodBlocks[i]);
+            if (i < methodBlocks.Count - 1)
+                content.AppendLine();
+        }
+        content.AppendLine("}");
+        content.AppendLine();
+        content.AppendLine($"export const {className} = new {clientClassName}();");
+
+        return content.ToString();
+    }
+
+    private static string GenerateMethod(ApiOperation op, SortedSet<string> requestImports, SortedSet<string> responseImports)
+    {
+        var operation = op.Operation;
+        var parameters = operation.Parameters ?? [];
+        var pathParams = parameters.Where(p => p.In == ParameterLocation.Path).ToList();
+        var queryParams = parameters.Where(p => p.In == ParameterLocation.Query).ToList();
+
+        // Path/query parameter schemas are almost always primitives (route segments,
+        // filter values); a $ref here would point at a schema ClassifySchemas never
+        // saw (it only inspects request/response bodies), so there's no generated
+        // model file to import. We still resolve the TS type name via MapType, we
+        // just never wire it into an import statement.
+        var paramImports = new SortedSet<string>();
+
+        var parameterDeclarations = new List<string>();
+
+        foreach (var param in pathParams)
+        {
+            var tsType = param.Schema != null ? MapType(param.Schema, paramImports) : "string";
+            parameterDeclarations.Add($"{ToCamelCase(param.Name!)}: {tsType}");
+        }
+
+        string? requestBodyParamName = null;
+        var bodySchema = operation.RequestBody?.Content?.Values.FirstOrDefault()?.Schema;
+        if (bodySchema != null)
+        {
+            var requestBodyType = MapType(bodySchema, requestImports);
+            requestBodyParamName = "request";
+            parameterDeclarations.Add($"{requestBodyParamName}: {requestBodyType}");
+        }
+
+        var queryParamDeclarations = queryParams
+            .Select(param =>
+            {
+                var tsType = param.Schema != null ? MapType(param.Schema, paramImports) : "string";
+                var optional = param.Required ? "" : "?";
+                return $"{ToCamelCase(param.Name!)}{optional}: {tsType}";
+            })
+            .ToList();
+
+        string? queryParamName = null;
+        if (queryParamDeclarations.Count > 0)
+        {
+            queryParamName = "query";
+            parameterDeclarations.Add($"{queryParamName}: {{ {string.Join("; ", queryParamDeclarations)} }}");
+        }
+
+        string? responseType = null;
+        foreach (var (statusCode, response) in operation.Responses ?? new OpenApiResponses())
+        {
+            if (!statusCode.StartsWith('2'))
+                continue;
+
+            var schema = response.Content?.Values.FirstOrDefault()?.Schema;
+            if (schema == null)
+                continue;
+
+            responseType = MapType(schema, responseImports);
+            break;
+        }
+
+        var returnType = responseType ?? "void";
+        var httpVerb = op.HttpMethod.Method.ToLowerInvariant();
+        var route = BuildRouteExpression(op.Route, pathParams);
+
+        var axiosArgs = new List<string> { route };
+        var configParts = new List<string>();
+
+        if (requestBodyParamName != null)
+        {
+            if (httpVerb is "post" or "put" or "patch")
+                axiosArgs.Add(requestBodyParamName);
+            else
+                configParts.Add($"data: {requestBodyParamName}");
+        }
+        else if (httpVerb is "post" or "put" or "patch")
+        {
+            axiosArgs.Add("undefined");
+        }
+
+        if (queryParamName != null)
+            configParts.Add($"params: {queryParamName}");
+
+        if (configParts.Count > 0)
+            axiosArgs.Add($"{{ {string.Join(", ", configParts)} }}");
+
+        var callExpression = responseType != null
+            ? $"httpClient.{httpVerb}<{responseType}>({string.Join(", ", axiosArgs)})"
+            : $"httpClient.{httpVerb}({string.Join(", ", axiosArgs)})";
+
+        var body = new System.Text.StringBuilder();
+        body.AppendLine($"  async {op.MethodName}({string.Join(", ", parameterDeclarations)}): Promise<{returnType}> {{");
+        if (responseType != null)
+        {
+            body.AppendLine($"    const response = await {callExpression};");
+            body.AppendLine("    return response.data;");
+        }
+        else
+        {
+            body.AppendLine($"    await {callExpression};");
+        }
+        body.AppendLine("  }");
+
+        return body.ToString();
+    }
+
+    private static string BuildRouteExpression(string route, List<IOpenApiParameter> pathParams)
+    {
+        if (pathParams.Count == 0)
+            return $"\"{route}\"";
+
+        var interpolated = route;
+        foreach (var param in pathParams)
+            interpolated = interpolated.Replace($"{{{param.Name}}}", $"${{{ToCamelCase(param.Name!)}}}");
+
+        return $"`{interpolated}`";
     }
 
     private static string FindSolutionRoot(string startPath)

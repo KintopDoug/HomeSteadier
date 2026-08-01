@@ -20,7 +20,21 @@ builder.AddServiceDefaults();
 // Add services to the container.
 
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    // Set OperationId to the controller action name (e.g. "Register", "GetAll") so
+    // codegen tools (see HomeSteadier.CLI's 'packages gen') can name generated
+    // client methods after the actual C# action rather than guessing from the route.
+    options.AddOperationTransformer((operation, context, _) =>
+    {
+        if (context.Description.ActionDescriptor is Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor controllerActionDescriptor)
+        {
+            operation.OperationId = controllerActionDescriptor.ActionName;
+        }
+
+        return Task.CompletedTask;
+    });
+});
 builder.Services.AddSwaggerGen(options =>
 {
     // Enable the "Authorize" button so JWT-protected endpoints can be tested from Swagger UI.

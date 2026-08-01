@@ -115,7 +115,8 @@ Available commands:
                      then generate repositories for any new entities
                      (existing repositories are skipped, not overwritten)
   packages gen       Generate TypeScript request/response models in ReactApp/src/models
-                     from the API's OpenAPI document (requires the API to be running)
+                     and axios API clients in ReactApp/src/api, both from the API's
+                     OpenAPI document (requires the API to be running)
   help               Show this help message
   exit               Exit the CLI
 ```
@@ -166,7 +167,7 @@ Because scaffolding fully regenerates `HomesteadierDbContext.cs` on every run, d
 
 ### `packages gen`
 
-Generates TypeScript models for the request/response schemas exposed by the API's controllers, reading them from the API's OpenAPI document. **The API must already be running** in Development mode (e.g. `dotnet run --project Homesteadier.API`, or via Aspire) — this command fetches its live `/openapi/v1.json`, it doesn't build or introspect the API assembly directly.
+Generates TypeScript models for the request/response schemas exposed by the API's controllers, plus an axios-based API client class per controller, all reading from the API's OpenAPI document. **The API must already be running** in Development mode (e.g. `dotnet run --project Homesteadier.API`, or via Aspire) — this command fetches its live `/openapi/v1.json`, it doesn't build or introspect the API assembly directly.
 
 ```
 > packages gen
@@ -174,15 +175,23 @@ Fetching OpenAPI document from http://localhost:5128/openapi/v1.json...
 Created: User.ts
 
 Successfully generated TypeScript models! (1 created, 0 updated, 0 unchanged)
+
+Created: UsersApi.tsx
+
+Successfully generated TypeScript API clients! (1 created, 0 updated, 0 unchanged)
 ```
 
 What happens on each run:
 
 - Every schema referenced by a controller action's request body or response body is classified as a **request** or **response** model based on how it's actually used in the OpenAPI document (not by name), and written as a `.ts` file to `ReactApp/src/models/request/` or `ReactApp/src/models/response/` respectively.
 - If a schema is referenced by a property of another generated schema (nested `$ref`), it's generated too, colocated in the same folder as whatever referenced it — so generated files only ever import from their own folder (`./OtherType`), never across `request`/`response`.
-- Scripts are only rewritten when the generated content actually changes (reported as `Unchanged`), and files for schemas no longer exposed by the API are deleted (reported as `Removed`).
+- Every OpenAPI operation is grouped by its tag, which defaults to the owning controller's name (e.g. `UsersController` → tag `Users`). Each tag becomes one generated file, `ReactApp/src/api/{Tag}Api.tsx`, exporting a singleton client instance named `{Tag}Api` with one `async` instance method per operation (e.g. `UsersApi.GetAll()`), so a caller does `import { UsersApi } from "../api/UsersApi"; await UsersApi.GetAll();`.
+  - The method name comes from `operation.OperationId`, which the API sets to the controller action name via an operation transformer registered in `Program.cs`.
+  - Path parameters (e.g. `{id}`) become positional method arguments substituted into the route; a request body becomes a single `request` parameter; query parameters are bundled into one trailing optional object argument. The response body type becomes the method's `Promise<T>` return type (`Promise<void>` if the operation has no response content, e.g. a `204`).
+  - Generated client files import the shared axios instance from `ReactApp/src/api/httpClient.ts` (hand-written, not generated — this is where you'd add things like auth-header interceptors) and import request/response types from `../models/request/` / `../models/response/`.
+- Scripts are only rewritten when the generated content actually changes (reported as `Unchanged`), and files for schemas or controllers no longer exposed by the API are deleted (reported as `Removed`).
 - Property types are translated from the OpenAPI schema as faithfully as possible, including unioning multi-type properties (e.g. an OpenAPI 3.1 `"type": ["integer", "string"]` becomes `number | string`) and appending `| null` for nullable properties. A property is only marked optional (`?:`) if the OpenAPI schema doesn't list it under `required`.
 
 The base URL defaults to `http://localhost:5128` (the API's default local launch profile) and can be overridden via `Api:BaseUrl` in `appsettings.shared.json`/`appsettings.json`, or the `Api__BaseUrl` environment variable.
 
-Like the other `gen` commands, these files are fully regenerated on each run — don't hand-edit them.
+Like the other `gen` commands, these files are fully regenerated on each run — don't hand-edit them. `ReactApp/src/api/httpClient.ts` is the one exception in that folder: it's written once by hand and never touched by the generator.
