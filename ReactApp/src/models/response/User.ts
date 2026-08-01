@@ -6,6 +6,5 @@ export interface User {
   id?: string | number;
   isActive?: boolean;
   lastName?: string;
-  password?: string;
   updatedAt?: string;
 }
