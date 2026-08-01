@@ -1,6 +1,17 @@
 import { useMemo } from "react";
 import { observer } from "mobx-react-lite";
+import { z } from "zod";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import { Form, FormSubmitButton, FormTextField } from "../components/Form";
 import { SignUpViewModel } from "../viewModels/SignUpViewModel";
+
+const signUpSchema = z.object({
+  email: z.email("Enter a valid email address").min(1, "Email is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+});
 
 export const SignUp = observer(() => {
   const viewModel = useMemo(() => {
@@ -11,47 +22,56 @@ export const SignUp = observer(() => {
 
   return (
     <div className="signup-page">
-      <form className="signup-form" onSubmit={viewModel.handleSubmit}>
-        <h1>Sign Up</h1>
+      <Form
+        className="signup-form"
+        schema={signUpSchema}
+        values={viewModel.values}
+        onSubmit={viewModel.submit}
+      >
+        <Typography variant="h4" component="h1" align="center">
+          Sign Up
+        </Typography>
 
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          value={viewModel.email}
-          onChange={(e) => viewModel.setEmail(e.target.value)}
-          required
-        />
-
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          value={viewModel.password}
-          onChange={(e) => viewModel.setPassword(e.target.value)}
-          required
-        />
-
-        <label htmlFor="firstName">First Name</label>
-        <input
-          id="firstName"
-          type="text"
-          value={viewModel.firstName}
-          onChange={(e) => viewModel.setFirstName(e.target.value)}
-          required
-        />
-
-        <label htmlFor="lastName">Last Name</label>
-        <input
-          id="lastName"
-          type="text"
-          value={viewModel.lastName}
-          onChange={(e) => viewModel.setLastName(e.target.value)}
-          required
-        />
-
-        <button type="submit">Sign Up</button>
-      </form>
+        <Stack spacing={2}>
+          <FormTextField
+            name="email"
+            label="Email"
+            type="email"
+            fullWidth
+            required
+            value={viewModel.email}
+            onChange={viewModel.setEmail}
+          />
+          <FormTextField
+            name="password"
+            label="Password"
+            type="password"
+            fullWidth
+            required
+            value={viewModel.password}
+            onChange={viewModel.setPassword}
+          />
+          <FormTextField
+            name="firstName"
+            label="First Name"
+            fullWidth
+            required
+            value={viewModel.firstName}
+            onChange={viewModel.setFirstName}
+          />
+          <FormTextField
+            name="lastName"
+            label="Last Name"
+            fullWidth
+            required
+            value={viewModel.lastName}
+            onChange={viewModel.setLastName}
+          />
+          <FormSubmitButton variant="contained" fullWidth>
+            Sign Up
+          </FormSubmitButton>
+        </Stack>
+      </Form>
     </div>
   );
 });
