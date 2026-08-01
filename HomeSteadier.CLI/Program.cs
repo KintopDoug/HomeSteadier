@@ -106,7 +106,8 @@ void PrintHelp()
     Console.WriteLine("                     then generate repositories for any new entities");
     Console.WriteLine("                     (existing repositories are skipped, not overwritten)");
     Console.WriteLine("  packages gen       Generate TypeScript request/response models in ReactApp/src/models");
-    Console.WriteLine("                     from the API's OpenAPI document (requires the API to be running)");
+    Console.WriteLine("                     and axios API clients in ReactApp/src/api, both from the API's");
+    Console.WriteLine("                     OpenAPI document (requires the API to be running)");
     Console.WriteLine("  help               Show this help message");
     Console.WriteLine("  exit               Exit the CLI");
 }
