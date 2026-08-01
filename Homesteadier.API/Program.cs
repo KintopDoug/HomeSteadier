@@ -1,7 +1,14 @@
 
+using System.Text;
+using Homesteadier.API.Auth;
 using HomeSteadier.Database;
+using HomeSteadier.Models.Database;
 using Homesteadier.Repository;
+using Homesteadier.Repository.Identity;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,9 +20,25 @@ builder.AddServiceDefaults();
 // Add services to the container.
 
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    // Enable the "Authorize" button so JWT-protected endpoints can be tested from Swagger UI.
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.ParameterLocation.Header,
+        Description = "Paste the JWT returned by /api/auth/login (no \"Bearer \" prefix needed).",
+    });
+
+    options.AddSecurityRequirement(_ => new Microsoft.OpenApi.OpenApiSecurityRequirement
+    {
+        [new Microsoft.OpenApi.OpenApiSecuritySchemeReference("Bearer", null, null)] = new List<string>(),
+    });
+});
 
 // Configure DbContext and repositories
 var connectionString = BuildConnectionString(builder.Configuration);
@@ -42,6 +65,62 @@ foreach (var type in repositoryAssembly.GetTypes())
     }
 }
 
+// Configure ASP.NET Core Identity on top of the existing users table (custom UserStore).
+builder.Services.AddIdentityCore<User>(options =>
+{
+    options.User.RequireUniqueEmail = true;
+    options.Password.RequiredLength = 8;
+    options.Password.RequireNonAlphanumeric = false;
+})
+.AddUserStore<UserStore>();
+
+// JWT bearer authentication
+var jwtSettings = BuildJwtSettings(builder.Configuration);
+builder.Services.AddSingleton(jwtSettings);
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Keep original claim names (e.g. "sub") instead of remapping to legacy XML URIs.
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey)),
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+// Refresh-token service + cookie configuration
+builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+
+var cookieSettings = new RefreshCookieSettings();
+builder.Configuration.GetSection("RefreshCookie").Bind(cookieSettings);
+builder.Services.AddSingleton(cookieSettings);
+
+// CORS — the httpOnly refresh cookie requires credentialed cross-origin requests from the SPA,
+// which in turn requires an explicit origin allow-list (wildcard origins can't use credentials).
+const string SpaCorsPolicy = "SpaCors";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(SpaCorsPolicy, policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
 
 // Run database migrations before starting the app
@@ -61,6 +140,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors(SpaCorsPolicy);
+
+app.UseAuthentication();
 
 app.UseAuthorization();
 
@@ -93,6 +176,31 @@ async Task RunDatabaseMigrations(IServiceProvider services, IConfiguration confi
         logger.LogError(ex, "Error running database migrations");
         throw;
     }
+}
+
+JwtSettings BuildJwtSettings(IConfiguration configuration)
+{
+    var settings = new JwtSettings();
+    configuration.GetSection("Jwt").Bind(settings);
+
+    // The signing key is a secret; source it from the environment like POSTGRES_PASSWORD.
+    settings.SigningKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY", EnvironmentVariableTarget.Process)
+        ?? Environment.GetEnvironmentVariable("JWT_SIGNING_KEY", EnvironmentVariableTarget.User)
+        ?? Environment.GetEnvironmentVariable("JWT_SIGNING_KEY", EnvironmentVariableTarget.Machine)
+        ?? throw new InvalidOperationException(
+            "JWT_SIGNING_KEY environment variable is not set. Set it with: setx JWT_SIGNING_KEY \"<32+ char secret>\" and restart your terminal/IDE.");
+
+    // HS256 requires a key of at least 128 bits (16 bytes); fail fast with a clear message at
+    // startup rather than throwing on the first token issued. 32+ bytes is recommended.
+    var keyBytes = Encoding.UTF8.GetByteCount(settings.SigningKey);
+    if (keyBytes < 32)
+    {
+        throw new InvalidOperationException(
+            $"JWT_SIGNING_KEY is too short ({keyBytes} bytes). HS256 signing requires at least 32 bytes; " +
+            "set JWT_SIGNING_KEY to a random string of 32+ characters and restart your terminal/IDE.");
+    }
+
+    return settings;
 }
 
 string GetSharedConfigPath()
