@@ -29,7 +29,7 @@ export const SignUp = observer(() => {
         onSubmit={viewModel.submit}
       >
         <Typography variant="h4" component="h1" align="center">
-          Sign Up
+          Create Your Account
         </Typography>
 
         <Stack spacing={2}>
@@ -42,6 +42,7 @@ export const SignUp = observer(() => {
             value={viewModel.email}
             onChange={viewModel.setEmail}
           />
+
           <FormTextField
             name="password"
             label="Password"
@@ -51,6 +52,7 @@ export const SignUp = observer(() => {
             value={viewModel.password}
             onChange={viewModel.setPassword}
           />
+
           <FormTextField
             name="firstName"
             label="First Name"
@@ -59,6 +61,7 @@ export const SignUp = observer(() => {
             value={viewModel.firstName}
             onChange={viewModel.setFirstName}
           />
+
           <FormTextField
             name="lastName"
             label="Last Name"
