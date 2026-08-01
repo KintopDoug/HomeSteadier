@@ -1,4 +1,5 @@
 import { makeAutoObservable } from "mobx";
+import type { RegisterRequest } from "../models/request/RegisterRequest";
 
 export class SignUpViewModel {
   email = "";
@@ -12,6 +13,15 @@ export class SignUpViewModel {
 
   initialize() {
     // Reserved for future async setup (e.g. prefetching data).
+  }
+
+  get values(): RegisterRequest {
+    return {
+      email: this.email,
+      password: this.password,
+      firstName: this.firstName,
+      lastName: this.lastName,
+    };
   }
 
   setEmail(value: string) {
@@ -30,8 +40,8 @@ export class SignUpViewModel {
     this.lastName = value;
   }
 
-  handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    // Not wired to the API yet — the create-user endpoint doesn't exist yet.
-    e.preventDefault();
+  submit(values: RegisterRequest) {
+    // Not wired to the API yet — the create-user endpoint isn't wired up yet.
+    void values;
   }
 }
