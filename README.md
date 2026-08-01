@@ -48,6 +48,26 @@ To persist it across sessions, add the line above to your shell profile (`~/.bas
 echo 'export POSTGRES_PASSWORD="your-secure-password"' >> ~/.bashrc
 ```
 
+#### JWT Signing Key
+
+The API signs authentication tokens (JWTs) with a secret read from the `JWT_SIGNING_KEY`
+environment variable. Use a random string of **at least 32 characters**. The issuer,
+audience, and token lifetime are configured in `appsettings.shared.json` under `Jwt`.
+
+**Windows**
+
+```powershell
+setx JWT_SIGNING_KEY "a-long-random-secret-of-32-plus-characters"
+```
+
+Then restart your terminal/IDE (same as the Postgres password above).
+
+**macOS/Linux**
+
+```bash
+export JWT_SIGNING_KEY="a-long-random-secret-of-32-plus-characters"
+```
+
 ### Run the Application
 
 #### Option 1: Using the Batch Script (Recommended for Windows)
