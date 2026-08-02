@@ -35,8 +35,13 @@ export const Form = <TFieldValues extends FieldValues>({
 
   return (
     <FormProvider {...methods}>
-      <form id={id} className={className} onSubmit={methods.handleSubmit(onSubmit)} noValidate>
-        {children}
+      <form
+        id={id}
+        className={className}
+        onSubmit={methods.handleSubmit(onSubmit)}
+        noValidate
+      >
+        <div className="form-container">{children}</div>
       </form>
     </FormProvider>
   );

@@ -1,5 +1,7 @@
 
+using System.Globalization;
 using System.Text;
+using System.Threading.RateLimiting;
 using Homesteadier.API.Auth;
 using HomeSteadier.Database;
 using HomeSteadier.Models.Database;
@@ -112,10 +114,44 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSettings.Issuer,
             ValidAudience = jwtSettings.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey)),
+            // Defaults to 5 minutes, which would silently stretch a 15-minute access token to
+            // ~20. Keep a small allowance for clock drift between issuer and validator instead.
+            ClockSkew = TimeSpan.FromSeconds(30),
         };
     });
 
 builder.Services.AddAuthorization();
+
+// Brute-force protection for the credential-accepting endpoints (see AuthRateLimiting).
+// Partitioned by client IP: the request body isn't buffered at this point, so the submitted
+// email isn't available to include in the partition key.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(AuthRateLimiting.PolicyName, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = AuthRateLimiting.PermitLimit,
+                Window = AuthRateLimiting.Window,
+                QueueLimit = 0,
+            }));
+
+    // Only set headers here — writing a body would start the response before the middleware
+    // applies RejectionStatusCode, which then throws. The SPA keys off the 429 status.
+    options.OnRejected = (context, _) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return ValueTask.CompletedTask;
+    };
+});
 
 // Refresh-token service + cookie configuration
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
@@ -179,6 +215,11 @@ if (app.Environment.IsDevelopment())
 app.UseCors(SpaCorsPolicy);
 
 app.UseHttpsRedirection();
+
+// After UseCors so a 429 still carries CORS headers (otherwise the SPA sees an opaque CORS
+// failure instead of the rate-limit response), and so preflights are answered by the CORS
+// middleware rather than consuming permits.
+app.UseRateLimiter();
 
 app.UseAuthentication();
 

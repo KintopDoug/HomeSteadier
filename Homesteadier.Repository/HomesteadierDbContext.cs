@@ -53,8 +53,6 @@ public partial class HomesteadierDbContext : DbContext
 
             entity.ToTable("users");
 
-            entity.HasIndex(e => e.Email, "ix_users_email");
-
             entity.HasIndex(e => e.Email, "users_email_key").IsUnique();
 
             entity.Property(e => e.Id).HasColumnName("id");

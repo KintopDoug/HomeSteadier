@@ -6,37 +6,30 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { Link } from "@tanstack/react-router";
 import { Form, FormSubmitButton, FormTextField } from "../components/Form";
-import { SignUpViewModel } from "../viewModels/SignUpViewModel";
+import { LoginViewModel } from "../viewModels/LoginViewModel";
 
-const signUpSchema = z.object({
+const loginSchema = z.object({
   email: z.email("Enter a valid email address").min(1, "Email is required"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least 1 upper case letter")
-    .regex(/[a-z]/, "Password must contain at least 1 lower case letter")
-    .regex(/[0-9]/, "Password must contain at least 1 number"),
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  password: z.string().min(1, "Password is required"),
 });
 
-export const SignUp = observer(() => {
+export const Login = observer(() => {
   const viewModel = useMemo(() => {
-    const vm = new SignUpViewModel();
+    const vm = new LoginViewModel();
     vm.initialize();
     return vm;
   }, []);
 
   return (
-    <div className="signup-page">
+    <div className="login-page">
       <Form
-        className="signup-form"
-        schema={signUpSchema}
+        className="login-form"
+        schema={loginSchema}
         values={viewModel.values}
         onSubmit={viewModel.submit}
       >
         <Typography variant="h4" component="h1" align="center">
-          Create Your Account
+          Sign In
         </Typography>
 
         <Stack spacing={2}>
@@ -64,31 +57,14 @@ export const SignUp = observer(() => {
             onChange={viewModel.setPassword}
           />
 
-          <FormTextField
-            name="firstName"
-            label="First Name"
-            fullWidth
-            required
-            value={viewModel.firstName}
-            onChange={viewModel.setFirstName}
-          />
-
-          <FormTextField
-            name="lastName"
-            label="Last Name"
-            fullWidth
-            required
-            value={viewModel.lastName}
-            onChange={viewModel.setLastName}
-          />
           <FormSubmitButton variant="contained" fullWidth>
-            Sign Up
+            Sign In
           </FormSubmitButton>
         </Stack>
       </Form>
 
       <Typography align="center">
-        Already have an account? <Link to="/login">Sign in</Link>
+        Don't have an account? <Link to="/register">Sign up</Link>
       </Typography>
     </div>
   );

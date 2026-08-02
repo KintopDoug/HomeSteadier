@@ -1,15 +1,13 @@
 import { makeAutoObservable } from "mobx";
-import type { RegisterRequest } from "../models/request/RegisterRequest";
+import type { LoginRequest } from "../models/request/LoginRequest";
 import { AuthApi } from "../api/AuthApi";
 import { getApiErrorMessage } from "../api/apiErrors";
 import { session } from "../stores/SessionStore";
 import { router } from "../router";
 
-export class SignUpViewModel {
+export class LoginViewModel {
   email = "";
   password = "";
-  firstName = "";
-  lastName = "";
   errorMessage: string | null = null;
 
   constructor() {
@@ -20,12 +18,10 @@ export class SignUpViewModel {
     // Reserved for future async setup (e.g. prefetching data).
   }
 
-  get values(): RegisterRequest {
+  get values(): LoginRequest {
     return {
       email: this.email,
       password: this.password,
-      firstName: this.firstName,
-      lastName: this.lastName,
     };
   }
 
@@ -37,27 +33,19 @@ export class SignUpViewModel {
     this.password = value;
   }
 
-  setFirstName(value: string) {
-    this.firstName = value;
-  }
-
-  setLastName(value: string) {
-    this.lastName = value;
-  }
-
   setErrorMessage(message: string | null) {
     this.errorMessage = message;
   }
 
-  async submit(values: RegisterRequest) {
+  async submit(values: LoginRequest) {
     this.setErrorMessage(null);
 
     try {
-      const response = await AuthApi.signUpAsync(values);
+      const response = await AuthApi.loginAsync(values);
       session.signIn(response);
       await router.navigate({ to: "/home" });
     } catch (error) {
-      this.setErrorMessage(getApiErrorMessage(error, "Registration failed. Please try again."));
+      this.setErrorMessage(getApiErrorMessage(error, "Sign in failed. Please try again."));
     }
   }
 }

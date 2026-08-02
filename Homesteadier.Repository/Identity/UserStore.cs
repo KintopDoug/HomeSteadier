@@ -2,6 +2,7 @@ using System.Globalization;
 using HomeSteadier.Models.Database;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Homesteadier.Repository.Identity;
 
@@ -56,9 +57,30 @@ public class UserStore :
         // CURRENT_TIMESTAMP column defaults apply.
         user.IsActive = true;
         _context.Users.Add(user);
-        await _context.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueEmailViolation(ex))
+        {
+            // The application-level pre-check (AuthController) can race: two concurrent
+            // sign-ups for the same email (or case-variants of it) can both pass the check
+            // before either commits. ix_users_email_upper is what actually closes that race;
+            // without this catch, the losing request would surface as an unhandled 500
+            // instead of the same "already exists" outcome the pre-check normally returns.
+            return IdentityResult.Failed(new IdentityError
+            {
+                Code = nameof(IdentityErrorDescriber.DuplicateEmail),
+                Description = "A user with that email already exists.",
+            });
+        }
+
         return IdentityResult.Success;
     }
+
+    private static bool IsUniqueEmailViolation(DbUpdateException ex)
+        => ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     public async Task<IdentityResult> UpdateAsync(User user, CancellationToken cancellationToken)
     {

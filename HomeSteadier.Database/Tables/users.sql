@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS "public"."users" (
     CONSTRAINT "users_email_key" UNIQUE (email)
 );
 
-CREATE INDEX IF NOT EXISTS ix_users_email ON public.users USING btree (email);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_upper ON public.users USING btree (upper((email)::text));
