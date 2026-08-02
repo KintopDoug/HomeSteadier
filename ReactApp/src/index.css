@@ -9,16 +9,8 @@ body {
   flex-direction: column;
 }
 
-.site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.5rem;
-  flex-shrink: 0;
-}
-
 .site-header-logo {
-  height: clamp(60px, 14vw, 150px);
+  height: clamp(40px, 6vw, 64px);
   max-width: 100%;
 }
 

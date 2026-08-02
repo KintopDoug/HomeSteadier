@@ -19,7 +19,7 @@ function restoreSession(): Promise<void> {
   if (!sessionRestorePromise) {
     sessionRestorePromise = (async () => {
       try {
-        const response = await AuthApi.refresh();
+        const response = await AuthApi.refreshAsync();
         session.signIn(response);
       } catch (error) {
         if (!isAxiosError(error) || error.response?.status !== 401) {

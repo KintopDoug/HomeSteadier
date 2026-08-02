@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import { observer } from "mobx-react-lite";
 import { Link } from "@tanstack/react-router";
+import AppBar from "@mui/material/AppBar";
+import Toolbar from "@mui/material/Toolbar";
+import Avatar from "@mui/material/Avatar";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -11,25 +15,48 @@ export const Header = observer(() => {
   const viewModel = useMemo(() => new HeaderViewModel(), []);
 
   return (
-    <header className="site-header">
-      <img
-        className="site-header-logo"
-        src="/HomeSteadier-icon-with-text.svg"
-        alt="HomeSteadier"
-      />
+    <AppBar
+      position="static"
+      color="default"
+      elevation={0}
+      sx={{ backgroundColor: "background.paper", borderBottom: 1, borderColor: "divider" }}
+    >
+      <Toolbar disableGutters sx={{ px: { xs: 2, sm: 3 }, py: 1, gap: 2 }}>
+        <Box
+          component={Link}
+          to="/"
+          sx={{ display: "flex", alignItems: "center", textDecoration: "none" }}
+        >
+          <img
+            className="site-header-logo"
+            src="/HomeSteadier-icon-with-text.svg"
+            alt="HomeSteadier"
+          />
+        </Box>
 
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{ alignItems: "center" }}
-        className="site-header-actions"
-      >
+        <Box sx={{ flexGrow: 1 }} />
+
         {session.isInitializing ? null : session.isAuthenticated ? (
-          <>
-            <Link to="/home">Home</Link>
-            <Typography variant="body2">
-              Signed in as {session.user?.email}
-            </Typography>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+            <Button component={Link} to="/home" color="inherit">
+              Home
+            </Button>
+
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: "center", display: { xs: "none", sm: "flex" } }}
+            >
+              <Avatar
+                sx={{ width: 32, height: 32, bgcolor: "primary.main", fontSize: "0.875rem" }}
+              >
+                {session.user?.email?.[0]?.toUpperCase()}
+              </Avatar>
+              <Typography variant="body2" color="text.secondary">
+                {session.user?.email}
+              </Typography>
+            </Stack>
+
             <Button
               variant="outlined"
               size="small"
@@ -38,9 +65,9 @@ export const Header = observer(() => {
             >
               Sign Out
             </Button>
-          </>
+          </Stack>
         ) : null}
-      </Stack>
-    </header>
+      </Toolbar>
+    </AppBar>
   );
 });
