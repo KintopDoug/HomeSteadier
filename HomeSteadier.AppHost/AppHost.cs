@@ -32,16 +32,28 @@ var postgres = builder.AddPostgres("pgsql", password: postgresPassword)
 
 var db = postgres.AddDatabase(databaseName);
 
-var api = builder.AddProject<Projects.Homesteadier_API>(projectName)
+var api = builder.AddProject<Projects.Homesteadier_API>($"{projectName}-API")
             .WithReference(db)
             .WaitFor(db);
+
+// Without this, DCP fronts the API's endpoints with a proxy that binds the ports
+// (5128/7131, from launchSettings.json) for the AppHost's whole lifetime — so stopping
+// the API in the dashboard doesn't free them, and launching the API's own 'https'
+// profile from the IDE fails with "port already in use". Binding directly means the
+// ports are released as soon as the resource stops. Called as a statement rather than
+// chained because it widens the builder's generic type, which `WithReference(api)` below
+// can't consume.
+api.WithEndpointProxySupport(false);
 
 builder.AddJavaScriptApp("react-frontend", "../ReactApp")
     .WithReference(api)
     .WaitFor(api)
     // Feeds the API endpoint into typeScript process env
     .WithEnvironment("VITE_API_URL", api.GetEndpoint("https"))
-    .WithHttpEndpoint(env: "VITE_PORT")
+    // Pinned to 5173 (Vite's own default) to match Cors:AllowedOrigins in
+    // appsettings.shared.json — without a fixed port, Aspire assigns a random one
+    // each run and the browser rejects the API's response for CORS mismatch.
+    .WithHttpEndpoint(port: 5173, env: "VITE_PORT")
     .WithExternalHttpEndpoints();
 
 

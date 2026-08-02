@@ -1,11 +1,15 @@
 import { makeAutoObservable } from "mobx";
+import { isAxiosError } from "axios";
 import type { RegisterRequest } from "../models/request/RegisterRequest";
+import { AuthApi } from "../api/AuthApi";
 
 export class SignUpViewModel {
   email = "";
   password = "";
   firstName = "";
   lastName = "";
+  errorMessage: string | null = null;
+  isRegistered = false;
 
   constructor() {
     makeAutoObservable(this, {}, { autoBind: true });
@@ -40,8 +44,24 @@ export class SignUpViewModel {
     this.lastName = value;
   }
 
-  submit(values: RegisterRequest) {
-    // Not wired to the API yet — the create-user endpoint isn't wired up yet.
-    void values;
+  setErrorMessage(message: string | null) {
+    this.errorMessage = message;
+  }
+
+  setIsRegistered(value: boolean) {
+    this.isRegistered = value;
+  }
+
+  async submit(values: RegisterRequest) {
+    this.setErrorMessage(null);
+
+    try {
+      await AuthApi.Register(values);
+      this.setIsRegistered(true);
+    } catch (error) {
+      this.setErrorMessage(isAxiosError<{ message?: string }>(error)
+        ? (error.response?.data.message ?? "Registration failed. Please try again.")
+        : "Registration failed. Please try again.");
+    }
   }
 }
