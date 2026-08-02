@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { observer } from "mobx-react-lite";
 import { z } from "zod";
+import Alert from "@mui/material/Alert";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { Form, FormSubmitButton, FormTextField } from "../components/Form";
@@ -8,7 +9,12 @@ import { SignUpViewModel } from "../viewModels/SignUpViewModel";
 
 const signUpSchema = z.object({
   email: z.email("Enter a valid email address").min(1, "Email is required"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least 1 upper case letter")
+    .regex(/[a-z]/, "Password must contain at least 1 lower case letter")
+    .regex(/[0-9]/, "Password must contain at least 1 number"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
 });
@@ -19,6 +25,16 @@ export const SignUp = observer(() => {
     vm.initialize();
     return vm;
   }, []);
+
+  if (viewModel.isRegistered) {
+    return (
+      <div className="signup-page">
+        <Alert severity="success">
+          Your account has been created. You can now sign in.
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="signup-page">
@@ -33,6 +49,10 @@ export const SignUp = observer(() => {
         </Typography>
 
         <Stack spacing={2}>
+          {viewModel.errorMessage && (
+            <Alert severity="error">{viewModel.errorMessage}</Alert>
+          )}
+
           <FormTextField
             name="email"
             label="Email"

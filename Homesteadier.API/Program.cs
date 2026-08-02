@@ -19,7 +19,12 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    // EF navigation properties (e.g. User.RefreshTokens <-> RefreshToken.User) form
+    // reference cycles that System.Text.Json can't serialize by default.
+    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+});
 builder.Services.AddOpenApi(options =>
 {
     // Set OperationId to the controller action name (e.g. "Register", "GetAll") so
@@ -124,11 +129,26 @@ builder.Services.AddSingleton(cookieSettings);
 const string SpaCorsPolicy = "SpaCors";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? Array.Empty<string>();
+var allowAspireDevHosts = builder.Environment.IsDevelopment();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(SpaCorsPolicy, policy =>
     {
-        policy.WithOrigins(allowedOrigins)
+        policy.SetIsOriginAllowed(origin =>
+            {
+                if (allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+                    return true;
+
+                // Aspire serves each resource from a generated
+                // "{resource}-{app}.dev.localhost" host whose port can change between
+                // runs, so match the suffix in Development rather than pinning every
+                // hostname/port pair in config. Never allowed outside Development.
+                if (!allowAspireDevHosts)
+                    return false;
+
+                return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+                    && uri.Host.EndsWith(".dev.localhost", StringComparison.OrdinalIgnoreCase);
+            })
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -153,9 +173,12 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
-
+// CORS must run before HTTPS redirection: a request arriving on the HTTP port would
+// otherwise get a 307 with no CORS headers, and browsers refuse to follow redirects on a
+// preflight — surfacing as an opaque CORS error in the SPA rather than a redirect.
 app.UseCors(SpaCorsPolicy);
+
+app.UseHttpsRedirection();
 
 app.UseAuthentication();
 
