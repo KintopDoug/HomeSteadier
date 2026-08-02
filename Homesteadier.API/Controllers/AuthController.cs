@@ -2,9 +2,11 @@ using Homesteadier.API.Auth;
 using HomeSteadier.Models.Database;
 using HomeSteadier.Models.Request.Auth;
 using HomeSteadier.Models.Response.Auth;
+using HomeSteadier.Models.Response.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Homesteadier.API.Controllers;
@@ -33,8 +35,9 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
-    [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
+    [EnableRateLimiting(AuthRateLimiting.PolicyName)]
+    [HttpPost("SignUp")]
+    public async Task<ActionResult<AuthResponse>> SignUp(RegisterRequest request)
     {
         var existing = await _userManager.FindByEmailAsync(request.Email);
         if (existing is not null)
@@ -63,6 +66,7 @@ public class AuthController : ControllerBase
         return CreatedAtAction(nameof(Me), null, response);
     }
 
+    [EnableRateLimiting(AuthRateLimiting.PolicyName)]
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
@@ -102,7 +106,12 @@ public class AuthController : ControllerBase
         RefreshTokenCookie.Append(Response, rotated.Value.NewRawToken, rotated.Value.ExpiresAt, _cookieSettings);
 
         var (accessToken, expiresAt) = _tokenService.CreateToken(user);
-        return Ok(new AuthResponse { Token = accessToken, ExpiresAt = expiresAt, User = user });
+        return Ok(new AuthResponse
+        {
+            Token = accessToken,
+            ExpiresAt = expiresAt,
+            User = UserResponse.FromEntity(user),
+        });
     }
 
     [HttpPost("logout")]
@@ -120,7 +129,7 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("me")]
-    public async Task<ActionResult<User>> Me()
+    public async Task<ActionResult<UserResponse>> Me()
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (userId is null)
@@ -134,7 +143,7 @@ public class AuthController : ControllerBase
             return NotFound();
         }
 
-        return Ok(user);
+        return Ok(UserResponse.FromEntity(user));
     }
 
     /// <summary>Issues an access token + a rotating refresh cookie for a freshly-authenticated user.</summary>
@@ -149,7 +158,7 @@ public class AuthController : ControllerBase
         {
             Token = accessToken,
             ExpiresAt = expiresAt,
-            User = user,
+            User = UserResponse.FromEntity(user),
         };
     }
 }

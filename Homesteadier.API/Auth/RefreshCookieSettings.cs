@@ -10,8 +10,13 @@ public class RefreshCookieSettings
 {
     public string Name { get; set; } = "refreshToken";
 
-    /// <summary>Scope the cookie to the auth routes so it isn't sent on every API call.</summary>
-    public string Path { get; set; } = "/api/auth";
+    /// <summary>
+    /// Scope the cookie to the auth routes so it isn't sent on every API call. Cookie path
+    /// matching is case-sensitive, and AuthController's actual routes are "/api/Auth/..."
+    /// (from the controller name, via "api/[controller]") — a lowercase "/api/auth" here would
+    /// silently never match, so the cookie would never be sent back on any request.
+    /// </summary>
+    public string Path { get; set; } = "/api/Auth";
 
     /// <summary>One of "None", "Lax", "Strict". "None" requires Secure=true and HTTPS.</summary>
     public string SameSite { get; set; } = "None";

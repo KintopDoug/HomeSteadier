@@ -3,30 +3,30 @@ import { httpClient } from "./httpClient";
 import type { LoginRequest } from "../models/request/LoginRequest";
 import type { RegisterRequest } from "../models/request/RegisterRequest";
 import type { AuthResponse } from "../models/response/AuthResponse";
-import type { User } from "../models/response/User";
+import type { UserResponse } from "../models/response/UserResponse";
 
 class AuthApiClient {
-  async Login(request: LoginRequest): Promise<AuthResponse> {
+  async loginAsync(request: LoginRequest): Promise<AuthResponse> {
     const response = await httpClient.post<AuthResponse>("/api/Auth/login", request);
     return response.data;
   }
 
-  async Logout(): Promise<void> {
+  async logoutAsync(): Promise<void> {
     await httpClient.post("/api/Auth/logout", undefined);
   }
 
-  async Me(): Promise<User> {
-    const response = await httpClient.get<User>("/api/Auth/me");
+  async meAsync(): Promise<UserResponse> {
+    const response = await httpClient.get<UserResponse>("/api/Auth/me");
     return response.data;
   }
 
-  async Refresh(): Promise<AuthResponse> {
+  async refreshAsync(): Promise<AuthResponse> {
     const response = await httpClient.post<AuthResponse>("/api/Auth/refresh", undefined);
     return response.data;
   }
 
-  async Register(request: RegisterRequest): Promise<AuthResponse> {
-    const response = await httpClient.post<AuthResponse>("/api/Auth/register", request);
+  async signUpAsync(request: RegisterRequest): Promise<AuthResponse> {
+    const response = await httpClient.post<AuthResponse>("/api/Auth/SignUp", request);
     return response.data;
   }
 }

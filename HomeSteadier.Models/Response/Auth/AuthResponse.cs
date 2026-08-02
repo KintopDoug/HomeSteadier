@@ -1,4 +1,4 @@
-using HomeSteadier.Models.Database;
+using HomeSteadier.Models.Response.Users;
 
 namespace HomeSteadier.Models.Response.Auth;
 
@@ -8,5 +8,5 @@ public class AuthResponse
 
     public DateTime ExpiresAt { get; set; }
 
-    public User User { get; set; } = null!;
+    public UserResponse User { get; set; } = null!;
 }

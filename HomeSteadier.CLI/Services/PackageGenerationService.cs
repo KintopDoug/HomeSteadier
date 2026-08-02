@@ -500,8 +500,11 @@ public class PackageGenerationService
             ? $"httpClient.{httpVerb}<{responseType}>({string.Join(", ", axiosArgs)})"
             : $"httpClient.{httpVerb}({string.Join(", ", axiosArgs)})";
 
+        // op.MethodName mirrors the C# action name (PascalCase, via OperationId) for
+        // grouping/ordering, but the emitted call is a TS method, so it's camelCased here
+        // rather than at the source — same convention already used for property/param names.
         var body = new System.Text.StringBuilder();
-        body.AppendLine($"  async {op.MethodName}({string.Join(", ", parameterDeclarations)}): Promise<{returnType}> {{");
+        body.AppendLine($"  async {ToCamelCase(op.MethodName)}Async({string.Join(", ", parameterDeclarations)}): Promise<{returnType}> {{");
         if (responseType != null)
         {
             body.AppendLine($"    const response = await {callExpression};");

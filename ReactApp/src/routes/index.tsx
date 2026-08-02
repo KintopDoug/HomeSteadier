@@ -1,6 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { SignUp } from '../pages/SignUp'
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { session } from "../stores/SessionStore";
+import { Login } from "../pages/Login";
 
-export const Route = createFileRoute('/')({
-  component: SignUp,
-})
+export const Route = createFileRoute("/")({
+  beforeLoad: () => {
+    if (session.isAuthenticated) {
+      throw redirect({ to: "/home" });
+    }
+  },
+  component: Login,
+});
