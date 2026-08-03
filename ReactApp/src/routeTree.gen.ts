@@ -13,7 +13,10 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedLivestockRouteImport } from './routes/_authenticated.livestock'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated.home'
+import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated.garden'
+import { Route as AuthenticatedConstructionRouteImport } from './routes/_authenticated.construction'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -34,23 +37,45 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedLivestockRoute = AuthenticatedLivestockRouteImport.update({
+  id: '/livestock',
+  path: '/livestock',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
   id: '/home',
   path: '/home',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedGardenRoute = AuthenticatedGardenRouteImport.update({
+  id: '/garden',
+  path: '/garden',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedConstructionRoute =
+  AuthenticatedConstructionRouteImport.update({
+    id: '/construction',
+    path: '/construction',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/construction': typeof AuthenticatedConstructionRoute
+  '/garden': typeof AuthenticatedGardenRoute
   '/home': typeof AuthenticatedHomeRoute
+  '/livestock': typeof AuthenticatedLivestockRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/construction': typeof AuthenticatedConstructionRoute
+  '/garden': typeof AuthenticatedGardenRoute
   '/home': typeof AuthenticatedHomeRoute
+  '/livestock': typeof AuthenticatedLivestockRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -58,20 +83,40 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/_authenticated/construction': typeof AuthenticatedConstructionRoute
+  '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
+  '/_authenticated/livestock': typeof AuthenticatedLivestockRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/register' | '/home'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/register'
+    | '/construction'
+    | '/garden'
+    | '/home'
+    | '/livestock'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/register' | '/home'
+  to:
+    | '/'
+    | '/login'
+    | '/register'
+    | '/construction'
+    | '/garden'
+    | '/home'
+    | '/livestock'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
     | '/register'
+    | '/_authenticated/construction'
+    | '/_authenticated/garden'
     | '/_authenticated/home'
+    | '/_authenticated/livestock'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -111,6 +156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/livestock': {
+      id: '/_authenticated/livestock'
+      path: '/livestock'
+      fullPath: '/livestock'
+      preLoaderRoute: typeof AuthenticatedLivestockRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/home': {
       id: '/_authenticated/home'
       path: '/home'
@@ -118,15 +170,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHomeRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/garden': {
+      id: '/_authenticated/garden'
+      path: '/garden'
+      fullPath: '/garden'
+      preLoaderRoute: typeof AuthenticatedGardenRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/construction': {
+      id: '/_authenticated/construction'
+      path: '/construction'
+      fullPath: '/construction'
+      preLoaderRoute: typeof AuthenticatedConstructionRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedConstructionRoute: typeof AuthenticatedConstructionRoute
+  AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
+  AuthenticatedLivestockRoute: typeof AuthenticatedLivestockRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedConstructionRoute: AuthenticatedConstructionRoute,
+  AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
+  AuthenticatedLivestockRoute: AuthenticatedLivestockRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
