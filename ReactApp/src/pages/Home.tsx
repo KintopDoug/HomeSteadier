@@ -18,9 +18,26 @@ type Section = {
 };
 
 const sections: Section[] = [
-  { label: "Garden Management", path: "/garden", color: "secondary", Icon: YardIcon },
-  { label: "Livestock Management", path: "/livestock", color: "primary", Icon: PetsIcon, disabled: true },
-  { label: "Construction Project Management", path: "/construction", color: "tertiary", Icon: ConstructionIcon, disabled: true },
+  {
+    label: "Garden Assistant",
+    path: "/garden",
+    color: "secondary",
+    Icon: YardIcon,
+  },
+  {
+    label: "Livestock Management",
+    path: "/livestock",
+    color: "primary",
+    Icon: PetsIcon,
+    disabled: true,
+  },
+  {
+    label: "Construction Project Management",
+    path: "/construction",
+    color: "tertiary",
+    Icon: ConstructionIcon,
+    disabled: true,
+  },
 ];
 
 export const Home = observer(() => {

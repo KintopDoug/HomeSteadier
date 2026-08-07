@@ -5,7 +5,7 @@ export const Garden = observer(() => {
   return (
     <div className="garden-page">
       <Typography variant="h4" component="h1">
-        Garden Management
+        Garden Assistant
       </Typography>
     </div>
   );
