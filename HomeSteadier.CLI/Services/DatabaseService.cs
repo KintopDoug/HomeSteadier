@@ -7,11 +7,13 @@ public class DatabaseService
 {
     private readonly DatabaseMigrationService _migrationService;
     private readonly TableScriptGenerationService _tableScriptGenerationService;
+    private readonly SeedDataService _seedDataService;
 
     public DatabaseService()
     {
         _migrationService = new DatabaseMigrationService();
         _tableScriptGenerationService = new TableScriptGenerationService();
+        _seedDataService = new SeedDataService();
     }
 
     public async Task RunMigrationsAsync(IConfiguration configuration)
@@ -96,10 +98,65 @@ public class DatabaseService
         }
     }
 
+    public async Task SeedAsync(IConfiguration configuration)
+    {
+        try
+        {
+            var connectionString = GetConnectionString(configuration);
+            var seedsDirectory = GetSeedsPath();
+
+            Console.WriteLine("Importing seed data...");
+            Console.WriteLine($"Reading seed files from: {seedsDirectory}");
+            Console.WriteLine();
+
+            var result = await _seedDataService.SeedAsync(connectionString, seedsDirectory);
+
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"{result.Message}: {result.Error}");
+                Console.ResetColor();
+                return;
+            }
+
+            foreach (var success in result.Succeeded)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"Imported: {success.Table}.csv ({success.RowsImported} row(s))");
+                Console.ResetColor();
+            }
+
+            foreach (var failure in result.Failed)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Failed: {failure.Table}.csv");
+                Console.WriteLine($"  {failure.Error}");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine();
+            Console.ForegroundColor = result.Success ? ConsoleColor.Green : ConsoleColor.Yellow;
+            Console.WriteLine($"{result.Message} ({result.Succeeded.Count} succeeded, {result.Failed.Count} failed)");
+            Console.ResetColor();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\nError importing seed data: {ex.Message}");
+            Console.ResetColor();
+        }
+    }
+
     private string GetTablesPath()
     {
         var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
         return Path.Combine(solutionRoot, "HomeSteadier.Database", "Tables");
+    }
+
+    private string GetSeedsPath()
+    {
+        var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);
+        return Path.Combine(solutionRoot, "HomeSteadier.Database", "Seeds");
     }
 
     private string FindSolutionRoot(string startPath)

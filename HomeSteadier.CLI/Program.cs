@@ -62,6 +62,10 @@ async Task ProcessCommand(string[] parts, DatabaseService databaseService, Dotne
             await databaseService.GenerateTableScriptsAsync(configuration);
             break;
 
+        case ["database", "seed"]:
+            await databaseService.SeedAsync(configuration);
+            break;
+
         case ["dotnet", "gen"]:
             await dotnetService.GenerateModelsAsync(configuration);
             break;
@@ -102,6 +106,9 @@ void PrintHelp()
     Console.WriteLine("  database update    Run pending DbUp migrations");
     Console.WriteLine("  database gen       Create/update a CREATE TABLE script per table in");
     Console.WriteLine("                     HomeSteadier.Database/Tables from the live schema");
+    Console.WriteLine("  database seed      Import each .csv file in HomeSteadier.Database/Seeds into");
+    Console.WriteLine("                     the table it's named after, validating CSV columns against");
+    Console.WriteLine("                     the live schema first");
     Console.WriteLine("  dotnet gen         Scaffold entity models + DbContext from the database schema,");
     Console.WriteLine("                     then generate repositories for any new entities");
     Console.WriteLine("                     (existing repositories are skipped, not overwritten)");
