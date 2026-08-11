@@ -73,7 +73,7 @@ public class SeedDataService
         var columns = headers.Select(h => tableColumns[h]).ToList();
         var columnList = string.Join(", ", columns.Select(c => $"\"{c.Name}\""));
         var paramList = string.Join(", ", columns.Select((_, i) => $"@p{i}"));
-        var insertSql = $"INSERT INTO \"public\".\"{table}\" ({columnList}) VALUES ({paramList})";
+        var insertSql = $"INSERT INTO \"public\".\"{table}\" ({columnList}) VALUES ({paramList}){await BuildUpsertClauseAsync(connection, table, columns)}";
 
         await using var transaction = await connection.BeginTransactionAsync();
         try
@@ -133,6 +133,59 @@ public class SeedDataService
             "boolean" => bool.Parse(value),
             _ => value
         };
+    }
+
+    // Re-seeding must update existing rows in place rather than delete-then-insert, since a delete
+    // would cascade to (or be blocked by) foreign keys held by other tables. So on a re-run, rows
+    // that collide with an existing unique constraint/index are updated instead of rejected — via
+    // ON CONFLICT — as long as that constraint's columns are all present in the CSV.
+    private static async Task<string> BuildUpsertClauseAsync(NpgsqlConnection connection, string table, List<ColumnInfo> columns)
+    {
+        var columnNames = new HashSet<string>(columns.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+        var uniqueGroups = await GetUniqueIndexColumnGroupsAsync(connection, table);
+
+        var conflictColumns = uniqueGroups
+            .Where(g => g.All(columnNames.Contains))
+            .OrderBy(g => g.Count)
+            .FirstOrDefault();
+
+        if (conflictColumns == null)
+            return string.Empty;
+
+        var conflictList = string.Join(", ", conflictColumns.Select(c => $"\"{c}\""));
+        var updateColumns = columns.Where(c => !conflictColumns.Contains(c.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+
+        if (updateColumns.Count == 0)
+            return $" ON CONFLICT ({conflictList}) DO NOTHING";
+
+        var updateList = string.Join(", ", updateColumns.Select(c => $"\"{c.Name}\" = EXCLUDED.\"{c.Name}\""));
+        return $" ON CONFLICT ({conflictList}) DO UPDATE SET {updateList}";
+    }
+
+    private static async Task<List<List<string>>> GetUniqueIndexColumnGroupsAsync(NpgsqlConnection connection, string table)
+    {
+        const string sql = """
+            SELECT array_agg(a.attname ORDER BY x.n) AS columns
+            FROM pg_index ix
+            JOIN pg_class t ON t.oid = ix.indrelid
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS x(attnum, n) ON true
+            JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = x.attnum
+            WHERE t.relname = @table
+              AND n.nspname = 'public'
+              AND ix.indisunique
+            GROUP BY i.relname;
+            """;
+
+        var groups = new List<List<string>>();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("table", table);
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            groups.Add(reader.GetFieldValue<string[]>(0).ToList());
+
+        return groups;
     }
 
     private static async Task<Dictionary<string, ColumnInfo>> GetTableColumnsAsync(NpgsqlConnection connection, string table)

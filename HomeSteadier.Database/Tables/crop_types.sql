@@ -8,3 +8,5 @@ CREATE TABLE IF NOT EXISTS "public"."crop_types" (
     "sunlight_requirement_hours" numeric(6,2),
     CONSTRAINT "crop_types_pkey" PRIMARY KEY (id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_crop_types_name ON public.crop_types USING btree (name);

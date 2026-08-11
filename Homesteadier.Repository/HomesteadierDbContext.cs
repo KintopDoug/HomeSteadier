@@ -30,6 +30,8 @@ public partial class HomesteadierDbContext : DbContext
 
             entity.ToTable("crop_types");
 
+            entity.HasIndex(e => e.Name, "ix_crop_types_name").IsUnique();
+
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.Family)
                 .HasMaxLength(100)
