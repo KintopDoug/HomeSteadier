@@ -12,12 +12,80 @@ public partial class HomesteadierDbContext : DbContext
     {
     }
 
+    public virtual DbSet<CropType> CropTypes { get; set; }
+
+    public virtual DbSet<GardenBed> GardenBeds { get; set; }
+
+    public virtual DbSet<GardenBedCrop> GardenBedCrops { get; set; }
+
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<CropType>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("crop_types_pkey");
+
+            entity.ToTable("crop_types");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Family)
+                .HasMaxLength(100)
+                .HasColumnName("family");
+            entity.Property(e => e.Genus)
+                .HasMaxLength(100)
+                .HasColumnName("genus");
+            entity.Property(e => e.Name)
+                .HasMaxLength(100)
+                .HasColumnName("name");
+        });
+
+        modelBuilder.Entity<GardenBed>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("garden_bed_pkey");
+
+            entity.ToTable("garden_bed");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Length)
+                .HasPrecision(6, 2)
+                .HasColumnName("length");
+            entity.Property(e => e.Name)
+                .HasMaxLength(255)
+                .HasColumnName("name");
+            entity.Property(e => e.SunlightHours)
+                .HasPrecision(6, 2)
+                .HasColumnName("sunlight_hours");
+            entity.Property(e => e.Width)
+                .HasPrecision(6, 2)
+                .HasColumnName("width");
+        });
+
+        modelBuilder.Entity<GardenBedCrop>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("garden_bed_crops_pkey");
+
+            entity.ToTable("garden_bed_crops");
+
+            entity.HasIndex(e => e.CropTypeId, "ix_garden_bed_crops_crop_type_id");
+
+            entity.HasIndex(e => e.GardenBedId, "ix_garden_bed_crops_garden_bed_id");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.CropTypeId).HasColumnName("crop_type_id");
+            entity.Property(e => e.GardenBedId).HasColumnName("garden_bed_id");
+
+            entity.HasOne(d => d.CropType).WithMany(p => p.GardenBedCrops)
+                .HasForeignKey(d => d.CropTypeId)
+                .HasConstraintName("garden_bed_crops_crop_type_id_fkey");
+
+            entity.HasOne(d => d.GardenBed).WithMany(p => p.GardenBedCrops)
+                .HasForeignKey(d => d.GardenBedId)
+                .HasConstraintName("garden_bed_crops_garden_bed_id_fkey");
+        });
+
         modelBuilder.Entity<RefreshToken>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("refresh_tokens_pkey");
