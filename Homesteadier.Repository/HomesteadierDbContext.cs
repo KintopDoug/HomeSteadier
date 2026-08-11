@@ -40,6 +40,10 @@ public partial class HomesteadierDbContext : DbContext
             entity.Property(e => e.Name)
                 .HasMaxLength(100)
                 .HasColumnName("name");
+            entity.Property(e => e.SpacingInches).HasColumnName("spacing_inches");
+            entity.Property(e => e.SunlightRequirementHours)
+                .HasPrecision(6, 2)
+                .HasColumnName("sunlight_requirement_hours");
         });
 
         modelBuilder.Entity<GardenBed>(entity =>

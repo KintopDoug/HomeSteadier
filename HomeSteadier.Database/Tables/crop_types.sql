@@ -4,5 +4,7 @@ CREATE TABLE IF NOT EXISTS "public"."crop_types" (
     "name" character varying(100) NOT NULL,
     "genus" character varying(100) NOT NULL,
     "family" character varying(100) NOT NULL,
+    "spacing_inches" integer,
+    "sunlight_requirement_hours" numeric(6,2),
     CONSTRAINT "crop_types_pkey" PRIMARY KEY (id)
 );
