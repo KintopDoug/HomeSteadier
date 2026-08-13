@@ -301,10 +301,21 @@ string FindSolutionRoot(string startPath)
 
 string BuildConnectionString(IConfiguration configuration)
 {
-    var host = configuration["Database:Host"] ?? "localhost";
-    var port = configuration["Database:Port"] ?? "5432";
     var name = configuration["Database:Name"]
         ?? throw new InvalidOperationException("Database:Name not found in configuration.");
+
+    // Under Aspire orchestration (local run via AppHost, or deployed to Azure), the DB
+    // connection string is injected by WithReference(db) as ConnectionStrings:<name>. Prefer
+    // it: in Azure it points at the managed Flexible Server (localhost is meaningless there,
+    // since Postgres is a separate service), and it carries the right host/credentials.
+    var injected = configuration.GetConnectionString(name);
+    if (!string.IsNullOrWhiteSpace(injected))
+        return injected;
+
+    // Fallback for running the API standalone (no Aspire): build from shared config + the
+    // POSTGRES_PASSWORD environment variable.
+    var host = configuration["Database:Host"] ?? "localhost";
+    var port = configuration["Database:Port"] ?? "5432";
     var username = configuration["Database:Username"] ?? "postgres";
     var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.Process)
         ?? Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.User)

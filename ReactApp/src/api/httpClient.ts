@@ -1,11 +1,26 @@
 import axios from "axios";
 import { session } from "../stores/SessionStore";
 
+declare global {
+  interface Window {
+    __APP_CONFIG__?: { apiUrl?: string };
+  }
+}
+
+// API base URL, resolved in priority order:
+//  1. window.__APP_CONFIG__.apiUrl — written into /config.js at container start from the
+//     VITE_API_URL env var (see ReactApp/public/config.js + Dockerfile). This is how the
+//     deployed SPA learns the API URL, which isn't known when the static bundle is built.
+//  2. import.meta.env.VITE_API_URL — injected by Aspire when running `npm run dev` under AppHost.
+//  3. The localhost HTTPS endpoint — for a bare `npm run dev` with no Aspire. HTTPS (not HTTP)
+//     because the HTTP endpoint immediately redirects, and a redirected preflight fails CORS.
+const runtimeApiUrl = window.__APP_CONFIG__?.apiUrl?.trim();
+
 export const httpClient = axios.create({
-  // VITE_API_URL is injected by Aspire; the fallback covers running `npm run dev` on its
-  // own. It points at the API's HTTPS endpoint (see Homesteadier.API launchSettings.json)
-  // because the HTTP one immediately redirects to it, and a redirected preflight fails CORS.
-  baseURL: import.meta.env.VITE_API_URL ?? "https://localhost:7131",
+  baseURL:
+    (runtimeApiUrl ? runtimeApiUrl : undefined) ??
+    import.meta.env.VITE_API_URL ??
+    "https://localhost:7131",
   withCredentials: true,
 });
 
