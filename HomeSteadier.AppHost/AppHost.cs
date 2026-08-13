@@ -119,7 +119,10 @@ var reactFrontend = builder.AddJavaScriptApp("react-frontend", "../ReactApp")
     // each run and the browser rejects the API's response for CORS mismatch.
     // targetPort is pinned to 5173 too so the published nginx container (which listens on
     // 5173, see ReactApp/nginx.conf) matches the port ACA routes ingress + startup probe to.
-    .WithHttpEndpoint(port: 5173, targetPort: 5173, env: "VITE_PORT")
+    // isProxied: false because this non-container resource can't be fronted by a DCP proxy
+    // when port == targetPort (the proxy's listen and forward ports would collide); the dev
+    // server binds 5173 directly instead.
+    .WithHttpEndpoint(port: 5173, targetPort: 5173, env: "VITE_PORT", isProxied: false)
     .WithExternalHttpEndpoints()
     // Run mode uses the Vite dev server; publish mode builds the SPA and serves it from
     // the nginx image described by ReactApp/Dockerfile.
