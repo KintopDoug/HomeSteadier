@@ -7,6 +7,9 @@
     <title>
       Homesteadier
     </title>
+    <!-- Runtime config (API URL). Plain script so it runs before the deferred app module,
+         making window.__APP_CONFIG__ available by the time the app bootstraps. -->
+    <script src="/config.js"></script>
   </head>
   <body>
     <div id="root"></div>
