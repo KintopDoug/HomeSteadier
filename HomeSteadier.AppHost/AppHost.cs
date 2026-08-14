@@ -140,6 +140,12 @@ var reactFrontend = builder.AddJavaScriptApp("react-frontend", "../ReactApp")
 // ingress URL without imposing ordering.
 api.WithEnvironment("Cors__AllowedOrigins__6", reactFrontend.GetEndpoint("http"));
 
+// Custom domain (GoDaddy homesteadier.io) bound to the frontend Container App. When the SPA is
+// reached via the custom domain, the browser's Origin is https://test.homesteadier.io — not the
+// ACA default FQDN above — so it must be allowlisted explicitly or the SPA's API calls fail CORS.
+// Index 7 to avoid colliding with the env-injected FQDN at index 6.
+api.WithEnvironment("Cors__AllowedOrigins__7", "https://test.homesteadier.io");
+
 
 
 builder.Build().Run();
