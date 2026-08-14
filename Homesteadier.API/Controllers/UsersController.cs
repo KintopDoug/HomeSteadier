@@ -19,19 +19,19 @@ public class UsersController : ControllerBase
         _logger = logger;
     }
 
-    [HttpGet]
-    public async Task<ActionResult<List<UserResponse>>> GetAll()
-    {
-        try
-        {
-            var users = await _userRepository.GetAllAsync();
-            return Ok(users.Select(UserResponse.FromEntity).ToList());
-        }
-        catch (Exception ex)
-        {
-            // Log the detail; don't return ex.Message to the caller.
-            _logger.LogError(ex, "Error fetching all users");
-            return StatusCode(500, new { message = "Error fetching users" });
-        }
-    }
+    //[HttpGet]
+    //public async Task<ActionResult<List<UserResponse>>> GetAll()
+    //{
+    //    try
+    //    {
+    //        var users = await _userRepository.GetAllAsync();
+    //        return Ok(users.Select(UserResponse.FromEntity).ToList());
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        // Log the detail; don't return ex.Message to the caller.
+    //        _logger.LogError(ex, "Error fetching all users");
+    //        return StatusCode(500, new { message = "Error fetching users" });
+    //    }
+    //}
 }
