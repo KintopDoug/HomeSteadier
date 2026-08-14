@@ -27,7 +27,7 @@ or `run-aspire.bat` on Windows. This starts Postgres (Docker), the API, and the 
 ```bash
 dotnet run --project Homesteadier.API
 ```
-Swagger UI is at `/swagger` in Development. The API runs DbUp migrations automatically on startup before accepting requests.
+Swagger UI is at `/swagger` in Development. On startup, before accepting requests, the API runs `DatabaseInitializer.InitializeAsync` ([HomeSteadier.Database/DatabaseInitializer.cs](HomeSteadier.Database/DatabaseInitializer.cs)): it applies pending DbUp migrations (**fail-fast** — a bad migration aborts startup) and then seeds reference data from `HomeSteadier.Database/Seeds/*.csv` via `SeedDataService` (**warn-and-continue** — a seed failure is logged but doesn't block startup). The whole run is serialized by a session-level Postgres advisory lock so overlapping API replicas (e.g. an ACA rolling deploy) don't race — both steps are idempotent (DbUp journal; CSV `ON CONFLICT` upsert). The CLI `database update` / `database seed` commands remain for local/manual use.
 
 ### React app (ReactApp/)
 ```bash
