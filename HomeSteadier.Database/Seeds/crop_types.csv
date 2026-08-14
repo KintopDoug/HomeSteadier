@@ -1,0 +1,61 @@
+name,genus,family,spacing_inches,sunlight_requirement_hours
+Tomato,Solanum,Solanaceae,24,8
+Cucumber,Cucumis,Cucurbitaceae,12,8
+Kohlrabi,Brassica,Brassicaceae,6,6
+Corn,Zea,Poaceae,12,8
+Potato,Solanum,Solanaceae,12,6
+Bush Bean,Phaseolus,Fabaceae,4,6
+Pole Bean,Phaseolus,Fabaceae,6,6
+Basil,Ocimum,Lamiaceae,10,6
+Mint,Mentha,Lamiaceae,18,4
+Lemon Balm,Melissa,Lamiaceae,18,4
+Lime Balm,Melissa,Lamiaceae,18,4
+Beet,Beta,Amaranthaceae,3,6
+Turnip,Brassica,Brassicaceae,4,6
+Pepper,Capsicum,Solanaceae,18,8
+Zucchini,Cucurbita,Cucurbitaceae,24,8
+Yellow Summer Squash,Cucurbita,Cucurbitaceae,24,8
+Butternut Squash,Cucurbita,Cucurbitaceae,36,8
+Pumpkin,Cucurbita,Cucurbitaceae,48,8
+Watermelon,Citrullus,Cucurbitaceae,36,8
+Cantaloupe,Cucumis,Cucurbitaceae,24,8
+Carrot,Daucus,Apiaceae,3,6
+Radish,Raphanus,Brassicaceae,2,6
+Lettuce,Lactuca,Asteraceae,8,4
+Spinach,Spinacia,Amaranthaceae,4,4
+Kale,Brassica,Brassicaceae,18,6
+Broccoli,Brassica,Brassicaceae,18,6
+Cauliflower,Brassica,Brassicaceae,18,6
+Cabbage,Brassica,Brassicaceae,18,6
+Brussels Sprouts,Brassica,Brassicaceae,18,6
+Swiss Chard,Beta,Amaranthaceae,6,6
+Onion,Allium,Amaryllidaceae,4,6
+Garlic,Allium,Amaryllidaceae,4,6
+Leek,Allium,Amaryllidaceae,6,6
+Shallot,Allium,Amaryllidaceae,4,6
+Eggplant,Solanum,Solanaceae,24,8
+Okra,Abelmoschus,Malvaceae,12,8
+Asparagus,Asparagus,Asparagaceae,18,6
+Celery,Apium,Apiaceae,8,6
+Parsnip,Pastinaca,Apiaceae,4,6
+Rutabaga,Brassica,Brassicaceae,8,6
+Sweet Potato,Ipomoea,Convolvulaceae,12,8
+Garden Pea,Pisum,Fabaceae,3,6
+Fava Bean,Vicia,Fabaceae,6,6
+Edamame,Glycine,Fabaceae,4,6
+Arugula,Eruca,Brassicaceae,6,5
+Collard Greens,Brassica,Brassicaceae,18,6
+Mustard Greens,Brassica,Brassicaceae,8,6
+Bok Choy,Brassica,Brassicaceae,8,5
+Endive,Cichorium,Asteraceae,8,5
+Fennel,Foeniculum,Apiaceae,12,6
+Rosemary,Salvia,Lamiaceae,24,6
+Thyme,Thymus,Lamiaceae,12,6
+Oregano,Origanum,Lamiaceae,12,6
+Sage,Salvia,Lamiaceae,18,6
+Cilantro,Coriandrum,Apiaceae,4,5
+Dill,Anethum,Apiaceae,8,6
+Parsley,Petroselinum,Apiaceae,6,5
+Chives,Allium,Amaryllidaceae,6,6
+Sunflower,Helianthus,Asteraceae,18,8
+Strawberry,Fragaria,Rosaceae,12,7

@@ -194,8 +194,14 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Run database migrations before starting the app
-await RunDatabaseMigrations(app.Services, app.Configuration);
+// Apply pending migrations and seed reference data before the app serves any request. Serialized
+// across replicas by a Postgres advisory lock inside the initializer; migrations fail-fast (a bad
+// migration aborts startup), seeding warns and continues. Seed CSVs ship in the container under
+// Seeds/ (copied from HomeSteadier.Database). BuildConnectionString already prefers Aspire's
+// injected connection string (the managed Flexible Server in Azure).
+var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+var seedsPath = Path.Combine(AppContext.BaseDirectory, "Seeds");
+await new DatabaseInitializer().InitializeAsync(BuildConnectionString(app.Configuration), seedsPath, startupLogger);
 
 app.MapDefaultEndpoints();
 
@@ -247,33 +253,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 await app.RunAsync();
-
-async Task RunDatabaseMigrations(IServiceProvider services, IConfiguration configuration)
-{
-    var logger = services.GetRequiredService<ILogger<Program>>();
-    try
-    {
-        var connectionString = BuildConnectionString(configuration);
-        var migrationService = new DatabaseMigrationService();
-
-        var result = await migrationService.RunMigrationsAsync(connectionString);
-
-        if (result.Success)
-        {
-            logger.LogInformation("Database migrations completed successfully");
-        }
-        else
-        {
-            logger.LogError("Database migration failed: {Error}", result.Error);
-            throw new InvalidOperationException($"Database migration failed: {result.Error}");
-        }
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Error running database migrations");
-        throw;
-    }
-}
 
 JwtSettings BuildJwtSettings(IConfiguration configuration)
 {
