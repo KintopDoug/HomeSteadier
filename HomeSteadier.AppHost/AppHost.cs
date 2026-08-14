@@ -53,7 +53,11 @@ if (!builder.ExecutionContext.IsPublishMode)
 // generates a random name (e.g. "MYAHWGeHeC") that (a) changes if secrets are reset and
 // (b) won't exist in a data volume initialized under a different user. "postgres"/"admin"
 // are reserved by Azure Flexible Server and can't be the admin login, so use a custom name.
-var postgresUser = builder.AddParameter("postgres-user", "homesteadier_admin");
+// Sourced from Database:Username in appsettings.shared.json so it's the single source of truth
+// shared with the CLI and the API's standalone connection string (the local container is
+// initialized with this user, and the CLI/standalone API must connect as the same one).
+var databaseUsername = builder.Configuration["Database:Username"] ?? "homesteadier_admin";
+var postgresUser = builder.AddParameter("postgres-user", databaseUsername);
 
 // JWT signing key (HS256 requires >= 32 bytes; the API fails fast at startup otherwise).
 // Same split as the Postgres password:
