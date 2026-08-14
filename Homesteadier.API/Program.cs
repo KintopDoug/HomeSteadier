@@ -8,6 +8,7 @@ using HomeSteadier.Models.Database;
 using Homesteadier.Repository;
 using Homesteadier.Repository.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -197,6 +198,24 @@ var app = builder.Build();
 await RunDatabaseMigrations(app.Services, app.Configuration);
 
 app.MapDefaultEndpoints();
+
+// Behind the ACA ingress proxy the real client IP arrives in X-Forwarded-For and the original
+// scheme in X-Forwarded-Proto. Apply them onto HttpContext as the very first middleware, before
+// anything reads them — the brute-force rate limiter partitions by RemoteIpAddress (see the
+// AddRateLimiter policy above), which would otherwise be the single ingress IP, collapsing every
+// client into one shared bucket and defeating the limit. KnownNetworks/KnownProxies are cleared
+// because the ingress IP isn't known ahead of time; this is safe because the container only ever
+// receives traffic through that ingress, and ForwardLimit=1 reads only the entry the ingress
+// appended (the true client IP) — any client-supplied X-Forwarded-For values sit to its left and
+// are ignored, so they can't spoof their way into fresh rate-limit buckets.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    ForwardLimit = 1,
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
