@@ -140,11 +140,37 @@ var reactFrontend = builder.AddJavaScriptApp("react-frontend", "../ReactApp")
 // ingress URL without imposing ordering.
 api.WithEnvironment("Cors__AllowedOrigins__6", reactFrontend.GetEndpoint("http"));
 
-// Custom domain (GoDaddy homesteadier.io) bound to the frontend Container App. When the SPA is
-// reached via the custom domain, the browser's Origin is https://test.homesteadier.io — not the
-// ACA default FQDN above — so it must be allowlisted explicitly or the SPA's API calls fail CORS.
-// Index 7 to avoid colliding with the env-injected FQDN at index 6.
-api.WithEnvironment("Cors__AllowedOrigins__7", "https://test.homesteadier.io");
+// Custom domain for the frontend, bound in the manifest so azd reasserts it on every deploy (a
+// manually-bound one gets wiped, since azd overwrites the app's ingress from the manifest).
+// Publish-only: the callback targets ACA infra that doesn't exist in run mode, and the parameters
+// would be unresolved locally. The values come from azd's PARAMETER store (config.json
+// infra.parameters, populated by azd prompts) — NOT builder.Configuration and NOT `azd env set`,
+// neither of which azd surfaces to an Aspire parameter. Per-environment: each azd env supplies its
+// own custom-domain / certificate-name, so a future prod env needs no code change.
+//
+// Two-pass managed-cert bootstrap (can't bind a cert before DNS validates, can't validate before
+// the hostname exists): first deploy with certificate-name empty creates the hostname + DNS
+// validation binding; after the managed cert is issued, set certificate-name to its resource id
+// and redeploy to bind TLS.
+if (builder.ExecutionContext.IsPublishMode)
+{
+    var customDomain = builder.AddParameter("custom-domain");
+    var certificateName = builder.AddParameter("certificate-name");
+
+    // Allow the custom domain's origin for CORS (index 7, after the ACA FQDN at index 6). Composed
+    // from the same parameter via a ReferenceExpression, since the literal host isn't known here.
+    api.WithEnvironment("Cors__AllowedOrigins__7",
+        ReferenceExpression.Create($"https://{customDomain.Resource}"));
+
+    // ConfigureCustomDomain is an evaluation API in Aspire 13.4.6 and reports ASPIREACADOMAINS001
+    // as an error until explicitly acknowledged; suppress it just around this call.
+#pragma warning disable ASPIREACADOMAINS001
+    reactFrontend.PublishAsAzureContainerApp((infra, app) =>
+    {
+        app.ConfigureCustomDomain(customDomain, certificateName);
+    });
+#pragma warning restore ASPIREACADOMAINS001
+}
 
 
 

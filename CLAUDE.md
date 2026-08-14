@@ -119,6 +119,20 @@ The SPA is served by **nginx** (`ReactApp/Dockerfile`, `ReactApp/nginx.conf`) vi
 - nginx listens on **5173** (not 80) to match the Aspire endpoint's `targetPort` — ACA routes ingress and the startup probe there, and a mismatch makes the probe fail with exit code 1 ("Probe of StartUp failed").
 - The Dockerfile uses `npm install`, not `npm ci`: the Windows-generated `package-lock.json` prunes Linux-only optional deps (e.g. `@emnapi/runtime`), which `npm ci` hard-fails on.
 - **Runtime API URL injection.** Vite bakes `VITE_API_URL` at build time, but the API URL isn't known then. Instead the container's `docker-entrypoint.d` script writes `window.__APP_CONFIG__ = { apiUrl: "<VITE_API_URL>" }` into `config.js` at startup; `index.html` loads `config.js` before the app bundle, and `httpClient.ts` reads `window.__APP_CONFIG__.apiUrl` (falling back to `import.meta.env.VITE_API_URL` for local dev). `config.js` is served `no-store` so a redeploy's new URL isn't cached. `ReactApp/public/config.js` is the empty local placeholder.
+- **Cache headers** (`ReactApp/nginx.conf`): `index.html` and `config.js` are `no-store` — `index.html` names the current content-hashed bundle, so a cached copy would pin a browser to an old bundle across deploys (which once left a client calling the `localhost` dev API URL). Hashed `/assets/*` are served `immutable` (their filename changes when content does).
+
+### Custom domain (frontend)
+
+The frontend's custom domain is bound to its Container App **in the AppHost** (`reactFrontend.PublishAsAzureContainerApp(... ConfigureCustomDomain(customDomain, certificateName))`), not manually — a manual binding gets wiped on the next deploy because azd overwrites the app's ingress from the manifest. The whole block is gated on `builder.ExecutionContext.IsPublishMode` (no-op locally), and adds `https://<domain>` to the API's CORS allow-list as `Cors__AllowedOrigins__7` (composed from the `custom-domain` parameter via a `ReferenceExpression`, since the browser's `Origin` on the custom domain differs from the ACA default FQDN at index 6).
+
+**Per-environment via two Aspire parameters** (`custom-domain`, `certificate-name`) — a future `prod` env supplies its own values, no code change.
+
+**Where the values come from (this is subtle — got it wrong twice):** Aspire parameters resolve from azd's **parameter store** (`.azure/<env>/config.json` → `infra.parameters.custom_domain` / `certificate_name`), populated by azd **prompts** on `azd up`. They are **NOT** read from `builder.Configuration["…"]` (azd doesn't surface the azd environment into the AppHost's configuration) and **NOT** set by `azd env set` (that writes `.env`, a different store that Aspire parameters don't read). To set/change a value: enter it when azd prompts, or edit `infra.parameters.<name>` in `config.json` directly. Never pass the value as the second `AddParameter` argument — that becomes a fixed manifest value (once pinned it to `""`, silently stripping the cert every deploy).
+
+It's a **two-pass managed-cert bootstrap** (can't bind a cert before DNS validates, can't validate before the hostname exists):
+
+1. With `custom-domain` set (bare hostname, e.g. `test.homesteadier.io`) and `certificate-name` empty, `azd up` → creates the hostname + a DNS validation binding.
+2. At the DNS provider add a `CNAME` (subdomain → the app's default FQDN) and a `TXT` (`asuid.<subdomain>` → the app's `customDomainVerificationId`); let ACA issue the free managed cert; then set `certificate-name` to the cert's **resource id** and redeploy to bind TLS. `ConfigureCustomDomain` is gated behind the `ASPIREACADOMAINS001` evaluation-API diagnostic, suppressed via `#pragma` around the call.
 
 ### Not yet wired
 
