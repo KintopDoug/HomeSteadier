@@ -24,8 +24,6 @@ public class UserResponse
 
     public DateTime UpdatedAt { get; set; }
 
-    public string Test { get; set; }
-
     public static UserResponse FromEntity(User user) => new()
     {
         Id = user.Id,

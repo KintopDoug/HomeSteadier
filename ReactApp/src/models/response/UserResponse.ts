@@ -6,6 +6,5 @@ export interface UserResponse {
   id?: string | number;
   isActive?: boolean;
   lastName?: string;
-  test?: string;
   updatedAt?: string;
 }

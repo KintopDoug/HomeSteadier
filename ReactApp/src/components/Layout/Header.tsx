@@ -42,6 +42,10 @@ export const Header = observer(() => {
               Home
             </Button>
 
+            <Button component={Link} to="/change-password" color="inherit">
+              Change Password
+            </Button>
+
             <Stack
               direction="row"
               spacing={1}

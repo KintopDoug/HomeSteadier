@@ -2,7 +2,9 @@
 using System.Globalization;
 using System.Text;
 using System.Threading.RateLimiting;
+using Azure.Communication.Email;
 using Homesteadier.API.Auth;
+using Homesteadier.API.Email;
 using HomeSteadier.Database;
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository;
@@ -17,6 +19,16 @@ var builder = WebApplication.CreateBuilder(args);
 
 var sharedConfigPath = GetSharedConfigPath();
 builder.Configuration.AddJsonFile(sharedConfigPath, optional: true);
+
+// Re-apply the environment variables provider so it outranks appsettings.shared.json. Config
+// sources are last-wins, and CreateBuilder registers environment variables *before* the line
+// above — so without this, the shared file silently beats anything Aspire/ACA injects. That
+// isn't hypothetical: App__FrontendBaseUrl and Email__SenderAddress are both injected by
+// AppHost and both have (deliberately local/empty) defaults in the shared file, so deployed
+// reset links would point at localhost and the sender address would never arrive.
+// Cors__AllowedOrigins__6/7 escaped this only because they're array indices the file doesn't
+// define, which is luck rather than design.
+builder.Configuration.AddEnvironmentVariables();
 
 builder.AddServiceDefaults();
 
@@ -161,6 +173,46 @@ var cookieSettings = new RefreshCookieSettings();
 builder.Configuration.GetSection("RefreshCookie").Bind(cookieSettings);
 builder.Services.AddSingleton(cookieSettings);
 
+// Password reset: token lifetime, the password-replacement service, and the SPA origin that
+// emailed reset links point at.
+var passwordResetSettings = new PasswordResetSettings();
+builder.Configuration.GetSection("PasswordReset").Bind(passwordResetSettings);
+builder.Services.AddSingleton(passwordResetSettings);
+
+builder.Services.AddScoped<IPasswordResetTokenService, PasswordResetTokenService>();
+builder.Services.AddScoped<IPasswordUpdateService, PasswordUpdateService>();
+builder.Services.AddSingleton(new FrontendUrls(ResolveFrontendBaseUrl(builder.Configuration)));
+
+// Outbound email. The ACS connection string carries an access key, so it comes from the
+// environment like JWT_SIGNING_KEY rather than appsettings.shared.json; AppHost injects it into
+// the deployed container.
+var emailSettings = new EmailSettings();
+builder.Configuration.GetSection("Email").Bind(emailSettings);
+emailSettings.ConnectionString = ReadEnvironmentVariable("ACS_CONNECTION_STRING");
+builder.Services.AddSingleton(emailSettings);
+
+if (!string.IsNullOrWhiteSpace(emailSettings.ConnectionString)
+    && !string.IsNullOrWhiteSpace(emailSettings.SenderAddress))
+{
+    builder.Services.AddSingleton(new EmailClient(emailSettings.ConnectionString));
+    builder.Services.AddScoped<IEmailSender, AcsEmailSender>();
+}
+else if (builder.Environment.IsDevelopment())
+{
+    // ACS isn't provisioned locally and has no emulator. Log the reset link instead so the whole
+    // flow works from a fresh clone with no Azure account.
+    builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+}
+else
+{
+    // Same posture as a missing JWT_SIGNING_KEY: a deployed API that silently drops password
+    // reset emails is worse than one that refuses to start.
+    throw new InvalidOperationException(
+        "ACS_CONNECTION_STRING and Email:SenderAddress must both be configured outside Development. "
+        + "Set ACS_CONNECTION_STRING from the Azure Communication Services resource and fill in "
+        + "Email:SenderAddress with an address on a verified domain.");
+}
+
 // CORS — the httpOnly refresh cookie requires credentialed cross-origin requests from the SPA,
 // which in turn requires an explicit origin allow-list (wildcard origins can't use credentials).
 const string SpaCorsPolicy = "SpaCors";
@@ -254,15 +306,51 @@ app.MapControllers();
 
 await app.RunAsync();
 
+// setx only updates the registry, not the current process's inherited environment block, so a
+// variable set without restarting the terminal/IDE is only visible via the User/Machine targets.
+string? ReadEnvironmentVariable(string name)
+    => Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Process)
+        ?? Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User)
+        ?? Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine);
+
+/// <summary>
+/// The SPA origin that emailed links point at. AppHost injects App:FrontendBaseUrl from the
+/// frontend's endpoint, and — in publish mode only — App:FrontendBaseUrlOverride composed from
+/// the custom-domain parameter. The override is preferred but must be checked rather than
+/// trusted: on the first pass of the two-pass managed-cert bootstrap, or in an environment that
+/// never sets custom-domain, that expression composes to a bare "https://". Silently emailing
+/// every user a link to that is much worse than falling back to the default ACA hostname.
+/// </summary>
+string ResolveFrontendBaseUrl(IConfiguration configuration)
+{
+    string?[] candidates =
+    [
+        configuration["App:FrontendBaseUrlOverride"],
+        configuration["App:FrontendBaseUrl"],
+    ];
+
+    foreach (var candidate in candidates)
+    {
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            && !string.IsNullOrEmpty(uri.Host))
+        {
+            return candidate!.TrimEnd('/');
+        }
+    }
+
+    throw new InvalidOperationException(
+        "App:FrontendBaseUrl is not configured with an absolute http(s) URL, so password reset "
+        + "links cannot be built. Set it in appsettings.shared.json.");
+}
+
 JwtSettings BuildJwtSettings(IConfiguration configuration)
 {
     var settings = new JwtSettings();
     configuration.GetSection("Jwt").Bind(settings);
 
     // The signing key is a secret; source it from the environment like POSTGRES_PASSWORD.
-    settings.SigningKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY", EnvironmentVariableTarget.Process)
-        ?? Environment.GetEnvironmentVariable("JWT_SIGNING_KEY", EnvironmentVariableTarget.User)
-        ?? Environment.GetEnvironmentVariable("JWT_SIGNING_KEY", EnvironmentVariableTarget.Machine)
+    settings.SigningKey = ReadEnvironmentVariable("JWT_SIGNING_KEY")
         ?? throw new InvalidOperationException(
             "JWT_SIGNING_KEY environment variable is not set. Set it with: setx JWT_SIGNING_KEY \"<32+ char secret>\" and restart your terminal/IDE.");
 
@@ -315,9 +403,7 @@ string BuildConnectionString(IConfiguration configuration)
     var host = configuration["Database:Host"] ?? "localhost";
     var port = configuration["Database:Port"] ?? "5432";
     var username = configuration["Database:Username"] ?? "postgres";
-    var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.Process)
-        ?? Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.User)
-        ?? Environment.GetEnvironmentVariable("POSTGRES_PASSWORD", EnvironmentVariableTarget.Machine)
+    var password = ReadEnvironmentVariable("POSTGRES_PASSWORD")
         ?? throw new InvalidOperationException(
             "POSTGRES_PASSWORD environment variable is not set. Set it with: setx POSTGRES_PASSWORD \"<password>\" and restart your terminal/IDE.");
 
