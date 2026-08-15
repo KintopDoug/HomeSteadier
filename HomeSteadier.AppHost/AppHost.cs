@@ -140,6 +140,59 @@ var reactFrontend = builder.AddJavaScriptApp("react-frontend", "../ReactApp")
 // ingress URL without imposing ordering.
 api.WithEnvironment("Cors__AllowedOrigins__6", reactFrontend.GetEndpoint("http"));
 
+// The API composes password-reset links against the SPA's origin, which (like the CORS entry
+// above) isn't known until deploy. Same endpoint reference, and no reverse WaitFor for the same
+// reason. In publish mode this resolves to the ACA ingress URL; the custom domain overrides it
+// separately below.
+api.WithEnvironment("App__FrontendBaseUrl", reactFrontend.GetEndpoint("http"));
+
+// Azure Communication Services + Email, for the password-reset emails the API sends.
+//
+// Publish: provisioned from infra/communication-services.bicep. There's no Aspire hosting
+// integration for ACS and no Azure.Provisioning.CommunicationServices CDK package, so raw Bicep
+// via AddBicepTemplate is the supported escape hatch. The connection string is written to the
+// key vault Aspire provisions for secret outputs (the bicep's keyVaultName parameter is filled
+// in automatically) and read back with GetSecretOutput, so the key never appears in a
+// deployment output, the manifest, or the repo. The sender address isn't known until the
+// managed domain exists, so it's an output too rather than a value in appsettings.shared.json.
+//
+// Run: nothing is provisioned — ACS has no local emulator. The connection string is picked up
+// from the machine environment if it happens to be set (pointing at a real ACS resource), and
+// otherwise the API falls back to logging reset links in Development, so a fresh clone can
+// exercise the whole flow with no Azure account at all.
+if (builder.ExecutionContext.IsPublishMode)
+{
+    // The bicep writes the ACS connection string into this vault and the API reads it back out.
+    // An explicit vault rather than the "keyVaultName" convention: GetSecretOutput and its
+    // WithEnvironment overload are both [Obsolete] in 13.4.6 in favour of
+    // IAzureKeyVaultResource.GetSecret, which needs a vault resource to hang off.
+    var secrets = builder.AddAzureKeyVault("secrets");
+
+    var communicationServices = builder.AddBicepTemplate(
+            "communication-services",
+            "infra/communication-services.bicep")
+        .WithParameter("emailServiceName", $"{projectName}-email".ToLowerInvariant())
+        .WithParameter("communicationServiceName", $"{projectName}-acs".ToLowerInvariant())
+        .WithParameter("vaultName", secrets.Resource.NameOutputReference);
+
+    api.WithEnvironment("ACS_CONNECTION_STRING", secrets.Resource.GetSecret("connectionString"))
+        .WithEnvironment("Email__SenderAddress", communicationServices.GetOutput("senderAddress"))
+        // The secret only exists once the template has run.
+        .WaitFor(communicationServices);
+}
+else
+{
+    var acsConnectionStringValue = Environment.GetEnvironmentVariable("ACS_CONNECTION_STRING", EnvironmentVariableTarget.Process)
+        ?? Environment.GetEnvironmentVariable("ACS_CONNECTION_STRING", EnvironmentVariableTarget.User)
+        ?? Environment.GetEnvironmentVariable("ACS_CONNECTION_STRING", EnvironmentVariableTarget.Machine);
+
+    if (!string.IsNullOrWhiteSpace(acsConnectionStringValue))
+    {
+        var acsConnectionString = builder.AddParameter("acs-connection-string", acsConnectionStringValue, secret: true);
+        api.WithEnvironment("ACS_CONNECTION_STRING", acsConnectionString);
+    }
+}
+
 // Custom domain for the frontend, bound in the manifest so azd reasserts it on every deploy (a
 // manually-bound one gets wiped, since azd overwrites the app's ingress from the manifest).
 // Publish-only: the callback targets ACA infra that doesn't exist in run mode, and the parameters
@@ -160,6 +213,15 @@ if (builder.ExecutionContext.IsPublishMode)
     // Allow the custom domain's origin for CORS (index 7, after the ACA FQDN at index 6). Composed
     // from the same parameter via a ReferenceExpression, since the literal host isn't known here.
     api.WithEnvironment("Cors__AllowedOrigins__7",
+        ReferenceExpression.Create($"https://{customDomain.Resource}"));
+
+    // Password-reset links should point at the custom domain once it's bound. Injected as a
+    // separate *Override* key rather than overwriting App__FrontendBaseUrl above, because on the
+    // first bootstrap pass — or in an environment that never sets custom-domain — this composes
+    // to a bare "https://". A junk CORS origin is harmless; a junk link base would silently email
+    // every user a dead link. The API takes the override only when it parses as an absolute
+    // http(s) URL and otherwise falls back to the ACA hostname (see ResolveFrontendBaseUrl).
+    api.WithEnvironment("App__FrontendBaseUrlOverride",
         ReferenceExpression.Create($"https://{customDomain.Resource}"));
 
     // ConfigureCustomDomain is an evaluation API in Aspire 13.4.6 and reports ASPIREACADOMAINS001

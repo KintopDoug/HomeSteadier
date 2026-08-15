@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository.Repositories;
 
@@ -35,12 +33,12 @@ public class RefreshTokenService : IRefreshTokenService
     public async Task<(string RawToken, DateTime ExpiresAt)> IssueAsync(int userId)
     {
         var expiresAt = DateTime.UtcNow.AddDays(_settings.RefreshTokenExpiryDays);
-        var rawToken = GenerateRawToken();
+        var rawToken = SecureToken.Generate();
 
         await _repository.AddAsync(new RefreshToken
         {
             UserId = userId,
-            TokenHash = Hash(rawToken),
+            TokenHash = SecureToken.Hash(rawToken),
             ExpiresAt = expiresAt,
         });
         await _repository.SaveChangesAsync();
@@ -56,7 +54,7 @@ public class RefreshTokenService : IRefreshTokenService
         }
 
         var now = DateTime.UtcNow;
-        var existing = await _repository.GetByHashAsync(Hash(rawToken));
+        var existing = await _repository.GetByHashAsync(SecureToken.Hash(rawToken));
 
         if (existing is null || existing.ExpiresAt <= now)
         {
@@ -71,13 +69,13 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        var newRaw = GenerateRawToken();
+        var newRaw = SecureToken.Generate();
         var expiresAt = now.AddDays(_settings.RefreshTokenExpiryDays);
 
         var replacement = new RefreshToken
         {
             UserId = existing.UserId,
-            TokenHash = Hash(newRaw),
+            TokenHash = SecureToken.Hash(newRaw),
             ExpiresAt = expiresAt,
         };
         await _repository.AddAsync(replacement);
@@ -98,7 +96,7 @@ public class RefreshTokenService : IRefreshTokenService
             return;
         }
 
-        var existing = await _repository.GetByHashAsync(Hash(rawToken));
+        var existing = await _repository.GetByHashAsync(SecureToken.Hash(rawToken));
         if (existing is null || existing.RevokedAt is not null)
         {
             return;
@@ -108,16 +106,4 @@ public class RefreshTokenService : IRefreshTokenService
         await _repository.UpdateAsync(existing);
         await _repository.SaveChangesAsync();
     }
-
-    private static string GenerateRawToken()
-        => Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
-
-    private static string Hash(string rawToken)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
-
-    private static string Base64UrlEncode(byte[] bytes)
-        => Convert.ToBase64String(bytes)
-            .TrimEnd('=')
-            .Replace('+', '-')
-            .Replace('/', '_');
 }

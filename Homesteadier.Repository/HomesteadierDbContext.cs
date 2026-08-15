@@ -18,6 +18,8 @@ public partial class HomesteadierDbContext : DbContext
 
     public virtual DbSet<GardenBedCrop> GardenBedCrops { get; set; }
 
+    public virtual DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
@@ -90,6 +92,32 @@ public partial class HomesteadierDbContext : DbContext
             entity.HasOne(d => d.GardenBed).WithMany(p => p.GardenBedCrops)
                 .HasForeignKey(d => d.GardenBedId)
                 .HasConstraintName("garden_bed_crops_garden_bed_id_fkey");
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("password_reset_tokens_pkey");
+
+            entity.ToTable("password_reset_tokens");
+
+            entity.HasIndex(e => e.TokenHash, "ix_password_reset_tokens_token_hash").IsUnique();
+
+            entity.HasIndex(e => e.UserId, "ix_password_reset_tokens_user_id");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.ConsumedAt).HasColumnName("consumed_at");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnName("created_at");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.TokenHash)
+                .HasMaxLength(128)
+                .HasColumnName("token_hash");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            entity.HasOne(d => d.User).WithMany(p => p.PasswordResetTokens)
+                .HasForeignKey(d => d.UserId)
+                .HasConstraintName("password_reset_tokens_user_id_fkey");
         });
 
         modelBuilder.Entity<RefreshToken>(entity =>

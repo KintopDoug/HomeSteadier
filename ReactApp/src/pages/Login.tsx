@@ -60,6 +60,10 @@ export const Login = observer(() => {
           <FormSubmitButton variant="contained" fullWidth>
             Sign In
           </FormSubmitButton>
+
+          <Typography variant="body2" align="center">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </Typography>
         </Stack>
       </Form>
 

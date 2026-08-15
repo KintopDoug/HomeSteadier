@@ -6,16 +6,12 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { Link } from "@tanstack/react-router";
 import { Form, FormSubmitButton, FormTextField } from "../components/Form";
+import { passwordSchema } from "../validation/passwordSchema";
 import { SignUpViewModel } from "../viewModels/SignUpViewModel";
 
 const signUpSchema = z.object({
   email: z.email("Enter a valid email address").min(1, "Email is required"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least 1 upper case letter")
-    .regex(/[a-z]/, "Password must contain at least 1 lower case letter")
-    .regex(/[0-9]/, "Password must contain at least 1 number"),
+  password: passwordSchema,
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
 });
