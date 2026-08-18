@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using Azure.Communication.Email;
 using Homesteadier.API.Auth;
 using Homesteadier.API.Email;
+using Homesteadier.API.Middleware;
 using HomeSteadier.Database;
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository;
@@ -299,6 +300,10 @@ app.UseHttpsRedirection();
 app.UseRateLimiter();
 
 app.UseAuthentication();
+
+// After authentication so an authenticated request's user id is available to log, before
+// authorization/controller execution so both are covered by its try/catch.
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 app.UseAuthorization();
 

@@ -1,3 +1,4 @@
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,12 +88,18 @@ public static class Extensions
             builder.Services.AddOpenTelemetry().UseOtlpExporter();
         }
 
-        // Uncomment the following lines to enable the Azure Monitor exporter (requires the Azure.Monitor.OpenTelemetry.AspNetCore package)
-        //if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
-        //{
-        //    builder.Services.AddOpenTelemetry()
-        //       .UseAzureMonitor();
-        //}
+        // Ships traces, metrics, and - via the builder.Logging.AddOpenTelemetry call above -
+        // structured logs to Azure Monitor / Application Insights, so fields like
+        // RequestLoggingMiddleware's {Endpoint}/{UserId}/{Payload} become independently
+        // queryable columns instead of grep-only text in the container's console log.
+        // AppHost injects this connection string only in publish mode (see AppHost.cs); locally
+        // it's unset, so this is a no-op and Aspire's dashboard (the OTLP exporter above) remains
+        // the local telemetry sink.
+        if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+        {
+            builder.Services.AddOpenTelemetry()
+                .UseAzureMonitor();
+        }
 
         return builder;
     }

@@ -111,6 +111,18 @@ api.WithEndpointProxySupport(false);
 // external ingress in ACA — internal service-to-service reachability isn't enough.
 api.WithExternalHttpEndpoints();
 
+// Azure Monitor / Application Insights for structured, per-field-queryable telemetry (traces,
+// metrics, and logs — see the UseAzureMonitor() call in
+// HomeSteadier.ServiceDefaults/Extensions.cs). Publish-only: locally, Aspire's own dashboard
+// already receives OTLP telemetry directly from the running project, so there's nothing to
+// provision for `dotnet run`. WithReference injects APPLICATIONINSIGHTS_CONNECTION_STRING into
+// the API container, which UseAzureMonitor() picks up automatically.
+if (builder.ExecutionContext.IsPublishMode)
+{
+    var appInsights = builder.AddAzureApplicationInsights("insights");
+    api.WithReference(appInsights);
+}
+
 var reactFrontend = builder.AddJavaScriptApp("react-frontend", "../ReactApp")
     .WithReference(api)
     .WaitFor(api)
