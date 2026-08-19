@@ -27,6 +27,13 @@ jobs:
       AZURE_POSTGRES_USER: ${{ vars.AZURE_POSTGRES_USER }}
       AZURE_CERTIFICATE_NAME: ${{ vars.AZURE_CERTIFICATE_NAME }}
       AZURE_CUSTOM_DOMAIN: ${{ vars.AZURE_CUSTOM_DOMAIN }}
+      # Pins the Postgres admin password and JWT signing key to their existing values across
+      # both provision and deploy (azd deploy re-templates secured parameters too). Without
+      # these, a from-scratch CI environment has no memory of the previously-generated secrets
+      # and azd mints new ones, resetting the Postgres password (breaking existing DB
+      # connections) and rotating the JWT key (logging everyone out) on every run.
+      AZURE_PGSQL_PASSWORD: ${{ secrets.AZURE_PGSQL_PASSWORD }}
+      AZURE_JWT_SIGNING_KEY: ${{ secrets.AZURE_JWT_SIGNING_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,16 +56,8 @@ jobs:
         shell: pwsh
 
 
-      # AZURE_PGSQL_PASSWORD / AZURE_JWT_SIGNING_KEY pin the Postgres admin password and JWT
-      # signing key to their existing values. Without these, a from-scratch CI environment has
-      # no memory of the previously-generated secrets and azd mints new ones on every run,
-      # resetting the Postgres password (breaking existing DB connections) and rotating the JWT
-      # key (logging everyone out) on every deploy.
       - name: Provision Infrastructure
         run: azd provision --no-prompt
-        env:
-          AZURE_PGSQL_PASSWORD: ${{ secrets.AZURE_PGSQL_PASSWORD }}
-          AZURE_JWT_SIGNING_KEY: ${{ secrets.AZURE_JWT_SIGNING_KEY }}
 
       - name: Deploy Application
         run: azd deploy --no-prompt
