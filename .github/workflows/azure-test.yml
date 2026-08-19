@@ -59,6 +59,13 @@ jobs:
       - name: Provision Infrastructure
         run: azd provision --no-prompt
 
-      - name: Deploy Application
-        run: azd deploy --no-prompt
+      # Deployed as two separate steps, API first, so a failed API deploy (e.g. a bad
+      # migration) stops the job before the frontend deploys. Otherwise a partial failure
+      # could leave a new frontend build talking to a stale API whose contract it no longer
+      # matches (the frontend's models/API client are generated from the API's OpenAPI schema).
+      - name: Deploy API
+        run: azd deploy Homesteadier-API --no-prompt
+
+      - name: Deploy Frontend
+        run: azd deploy react-frontend --no-prompt
 
