@@ -5,6 +5,7 @@ import { router } from "../router";
 
 export class HeaderViewModel {
   isLoggingOut = false;
+  userMenuAnchor: HTMLElement | null = null;
 
   constructor() {
     makeAutoObservable(this, {}, { autoBind: true });
@@ -12,6 +13,14 @@ export class HeaderViewModel {
 
   setIsLoggingOut(value: boolean) {
     this.isLoggingOut = value;
+  }
+
+  openUserMenu(anchor: HTMLElement) {
+    this.userMenuAnchor = anchor;
+  }
+
+  closeUserMenu() {
+    this.userMenuAnchor = null;
   }
 
   async logout() {
