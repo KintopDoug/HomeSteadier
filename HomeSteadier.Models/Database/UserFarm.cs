@@ -11,11 +11,15 @@ public partial class UserFarm
 
     public int FarmId { get; set; }
 
-    public string Role { get; set; } = null!;
+    public int FarmRoleTypeId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
+    public DateTime UpdatedAt { get; set; }
+
     public virtual Farm Farm { get; set; } = null!;
+
+    public virtual FarmRoleType FarmRoleType { get; set; } = null!;
 
     public virtual User User { get; set; } = null!;
 }
