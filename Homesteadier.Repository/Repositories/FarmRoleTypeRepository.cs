@@ -1,5 +1,6 @@
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository;
+using Microsoft.EntityFrameworkCore;
 
 namespace Homesteadier.Repository.Repositories;
 
@@ -11,10 +12,9 @@ public class FarmRoleTypeRepository : Repository<FarmRoleType>, IFarmRoleTypeRep
     {
     }
 
-    // Implement custom query methods here. Example:
-    // public async Task<FarmRoleType?> GetByIdAsync(int id)
-    // {
-    //     return await _context.Set<FarmRoleType>()
-    //         .FirstOrDefaultAsync(e => e.Id == id);
-    // }
+    public async Task<FarmRoleType?> GetByNameAsync(string name)
+    {
+        return await _context.Set<FarmRoleType>()
+            .FirstOrDefaultAsync(r => r.Name == name);
+    }
 }

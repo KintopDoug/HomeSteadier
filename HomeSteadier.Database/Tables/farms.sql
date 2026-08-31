@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS "public"."farms" (
     "country" character varying(100),
     "latitude" numeric(9,6) NOT NULL,
     "longitude" numeric(9,6) NOT NULL,
-    "timezone" character varying(64) NOT NULL,
     "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "farms_pkey" PRIMARY KEY (id)

@@ -23,8 +23,6 @@ public partial class Farm
 
     public decimal Longitude { get; set; }
 
-    public string Timezone { get; set; } = null!;
-
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

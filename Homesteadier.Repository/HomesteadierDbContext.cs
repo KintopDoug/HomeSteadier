@@ -90,9 +90,6 @@ public partial class HomesteadierDbContext : DbContext
             entity.Property(e => e.State)
                 .HasMaxLength(100)
                 .HasColumnName("state");
-            entity.Property(e => e.Timezone)
-                .HasMaxLength(64)
-                .HasColumnName("timezone");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnName("updated_at");
