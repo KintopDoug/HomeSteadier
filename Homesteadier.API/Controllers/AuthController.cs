@@ -1,5 +1,6 @@
 using Homesteadier.API.Auth;
 using Homesteadier.API.Email;
+using Homesteadier.API.Farms;
 using HomeSteadier.Models.Database;
 using HomeSteadier.Models.Request.Auth;
 using HomeSteadier.Models.Response.Auth;
@@ -31,6 +32,8 @@ public class AuthController : ControllerBase
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IPasswordResetTokenService _passwordResetTokenService;
     private readonly IPasswordUpdateService _passwordUpdateService;
+    private readonly IFarmInvitationTokenService _farmInvitationTokenService;
+    private readonly IUserFarmRepository _userFarmRepository;
     private readonly IEmailSender _emailSender;
     private readonly PasswordResetSettings _passwordResetSettings;
     private readonly FrontendUrls _frontendUrls;
@@ -44,6 +47,8 @@ public class AuthController : ControllerBase
         IRefreshTokenRepository refreshTokenRepository,
         IPasswordResetTokenService passwordResetTokenService,
         IPasswordUpdateService passwordUpdateService,
+        IFarmInvitationTokenService farmInvitationTokenService,
+        IUserFarmRepository userFarmRepository,
         IEmailSender emailSender,
         PasswordResetSettings passwordResetSettings,
         FrontendUrls frontendUrls,
@@ -56,6 +61,8 @@ public class AuthController : ControllerBase
         _refreshTokenRepository = refreshTokenRepository;
         _passwordResetTokenService = passwordResetTokenService;
         _passwordUpdateService = passwordUpdateService;
+        _farmInvitationTokenService = farmInvitationTokenService;
+        _userFarmRepository = userFarmRepository;
         _emailSender = emailSender;
         _passwordResetSettings = passwordResetSettings;
         _frontendUrls = frontendUrls;
@@ -73,6 +80,23 @@ public class AuthController : ControllerBase
             return Conflict(new { message = "A user with that email already exists." });
         }
 
+        // Validate the invitation up front, before creating the account, so a stale/invalid link
+        // fails loudly rather than silently registering the user without joining them to a farm.
+        FarmInvitation? invitation = null;
+        if (!string.IsNullOrEmpty(request.InviteToken))
+        {
+            invitation = await _farmInvitationTokenService.ValidateAsync(request.InviteToken);
+            if (invitation is null)
+            {
+                return BadRequest(new { message = "This invitation is invalid or has expired." });
+            }
+
+            if (!string.Equals(invitation.Email, request.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { message = "This invitation was issued to a different email address." });
+            }
+        }
+
         var user = new User
         {
             Email = request.Email,
@@ -88,6 +112,19 @@ public class AuthController : ControllerBase
                 message = "Registration failed.",
                 errors = result.Errors.Select(e => new { e.Code, e.Description }),
             });
+        }
+
+        if (invitation is not null)
+        {
+            await _userFarmRepository.AddAsync(new UserFarm
+            {
+                UserId = user.Id,
+                FarmId = invitation.FarmId,
+                FarmRoleTypeId = invitation.FarmRoleTypeId,
+            });
+            await _userFarmRepository.SaveChangesAsync();
+
+            await _farmInvitationTokenService.ConsumeAsync(invitation);
         }
 
         var response = await IssueTokensAsync(user);

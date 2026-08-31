@@ -68,6 +68,16 @@ export const Header = observer(() => {
               anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
               transformOrigin={{ vertical: "top", horizontal: "right" }}
             >
+              {session.activeFarm?.roleName === "Admin" && (
+                <MenuItem
+                  component={Link}
+                  to="/invite-member"
+                  onClick={viewModel.closeUserMenu}
+                >
+                  Invite to Farm
+                </MenuItem>
+              )}
+
               <MenuItem
                 component={Link}
                 to="/change-password"

@@ -21,4 +21,12 @@ public class UserFarmRepository : Repository<UserFarm>, IUserFarmRepository
             .Where(uf => uf.UserId == userId)
             .ToListAsync();
     }
+
+    public async Task<UserFarm?> GetByUserAndFarmAsync(int userId, int farmId)
+    {
+        return await _context.Set<UserFarm>()
+            .AsNoTracking()
+            .Include(uf => uf.FarmRoleType)
+            .FirstOrDefaultAsync(uf => uf.UserId == userId && uf.FarmId == farmId);
+    }
 }

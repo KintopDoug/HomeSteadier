@@ -16,6 +16,8 @@ public partial class HomesteadierDbContext : DbContext
 
     public virtual DbSet<Farm> Farms { get; set; }
 
+    public virtual DbSet<FarmInvitation> FarmInvitations { get; set; }
+
     public virtual DbSet<FarmRoleType> FarmRoleTypes { get; set; }
 
     public virtual DbSet<GardenBed> GardenBeds { get; set; }
@@ -93,6 +95,47 @@ public partial class HomesteadierDbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnName("updated_at");
+        });
+
+        modelBuilder.Entity<FarmInvitation>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("farm_invitations_pkey");
+
+            entity.ToTable("farm_invitations");
+
+            entity.HasIndex(e => new { e.FarmId, e.Email }, "ix_farm_invitations_farm_id_email");
+
+            entity.HasIndex(e => e.TokenHash, "ix_farm_invitations_token_hash").IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AcceptedAt).HasColumnName("accepted_at");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Email)
+                .HasMaxLength(255)
+                .HasColumnName("email");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.FarmId).HasColumnName("farm_id");
+            entity.Property(e => e.FarmRoleTypeId).HasColumnName("farm_role_type_id");
+            entity.Property(e => e.InvitedByUserId).HasColumnName("invited_by_user_id");
+            entity.Property(e => e.TokenHash)
+                .HasMaxLength(128)
+                .HasColumnName("token_hash");
+
+            entity.HasOne(d => d.Farm).WithMany(p => p.FarmInvitations)
+                .HasForeignKey(d => d.FarmId)
+                .HasConstraintName("farm_invitations_farm_id_fkey");
+
+            entity.HasOne(d => d.FarmRoleType).WithMany(p => p.FarmInvitations)
+                .HasForeignKey(d => d.FarmRoleTypeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("farm_invitations_farm_role_type_id_fkey");
+
+            entity.HasOne(d => d.InvitedByUser).WithMany(p => p.FarmInvitations)
+                .HasForeignKey(d => d.InvitedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("farm_invitations_invited_by_user_id_fkey");
         });
 
         modelBuilder.Entity<FarmRoleType>(entity =>
