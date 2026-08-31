@@ -16,6 +16,8 @@ public partial class HomesteadierDbContext : DbContext
 
     public virtual DbSet<Farm> Farms { get; set; }
 
+    public virtual DbSet<FarmRoleType> FarmRoleTypes { get; set; }
+
     public virtual DbSet<GardenBed> GardenBeds { get; set; }
 
     public virtual DbSet<GardenBedCrop> GardenBedCrops { get; set; }
@@ -56,9 +58,9 @@ public partial class HomesteadierDbContext : DbContext
 
         modelBuilder.Entity<Farm>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("farm_pkey");
+            entity.HasKey(e => e.Id).HasName("farms_pkey");
 
-            entity.ToTable("farm");
+            entity.ToTable("farms");
 
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.AddressLine)
@@ -91,6 +93,26 @@ public partial class HomesteadierDbContext : DbContext
             entity.Property(e => e.Timezone)
                 .HasMaxLength(64)
                 .HasColumnName("timezone");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnName("updated_at");
+        });
+
+        modelBuilder.Entity<FarmRoleType>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("farm_role_types_pkey");
+
+            entity.ToTable("farm_role_types");
+
+            entity.HasIndex(e => e.Name, "ix_farm_role_types_name").IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Name)
+                .HasMaxLength(50)
+                .HasColumnName("name");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnName("updated_at");
@@ -246,18 +268,25 @@ public partial class HomesteadierDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnName("created_at");
             entity.Property(e => e.FarmId).HasColumnName("farm_id");
-            entity.Property(e => e.Role)
-                .HasMaxLength(50)
-                .HasDefaultValueSql("'owner'::character varying")
-                .HasColumnName("role");
+            entity.Property(e => e.FarmRoleTypeId).HasColumnName("farm_role_type_id");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnName("updated_at");
             entity.Property(e => e.UserId).HasColumnName("user_id");
 
             entity.HasOne(d => d.Farm).WithMany(p => p.UserFarms)
                 .HasForeignKey(d => d.FarmId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("user_farms_farm_id_fkey");
+
+            entity.HasOne(d => d.FarmRoleType).WithMany(p => p.UserFarms)
+                .HasForeignKey(d => d.FarmRoleTypeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("user_farms_farm_role_type_id_fkey");
 
             entity.HasOne(d => d.User).WithMany(p => p.UserFarms)
                 .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("user_farms_user_id_fkey");
         });
 
