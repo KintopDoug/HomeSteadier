@@ -1,6 +1,7 @@
 using Homesteadier.API.Auth;
-using Homesteadier.API.Email;
-using Homesteadier.API.Farms;
+using Homesteadier.Services;
+using Homesteadier.Services.Email;
+using Homesteadier.Services.Farms;
 using HomeSteadier.Models.Database;
 using HomeSteadier.Models.Request.Auth;
 using HomeSteadier.Models.Response.Auth;
@@ -32,8 +33,7 @@ public class AuthController : ControllerBase
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IPasswordResetTokenService _passwordResetTokenService;
     private readonly IPasswordUpdateService _passwordUpdateService;
-    private readonly IFarmInvitationTokenService _farmInvitationTokenService;
-    private readonly IUserFarmRepository _userFarmRepository;
+    private readonly ISignUpInvitationService _farmInvitationService;
     private readonly IEmailSender _emailSender;
     private readonly PasswordResetSettings _passwordResetSettings;
     private readonly FrontendUrls _frontendUrls;
@@ -47,8 +47,7 @@ public class AuthController : ControllerBase
         IRefreshTokenRepository refreshTokenRepository,
         IPasswordResetTokenService passwordResetTokenService,
         IPasswordUpdateService passwordUpdateService,
-        IFarmInvitationTokenService farmInvitationTokenService,
-        IUserFarmRepository userFarmRepository,
+        ISignUpInvitationService farmInvitationService,
         IEmailSender emailSender,
         PasswordResetSettings passwordResetSettings,
         FrontendUrls frontendUrls,
@@ -61,8 +60,7 @@ public class AuthController : ControllerBase
         _refreshTokenRepository = refreshTokenRepository;
         _passwordResetTokenService = passwordResetTokenService;
         _passwordUpdateService = passwordUpdateService;
-        _farmInvitationTokenService = farmInvitationTokenService;
-        _userFarmRepository = userFarmRepository;
+        _farmInvitationService = farmInvitationService;
         _emailSender = emailSender;
         _passwordResetSettings = passwordResetSettings;
         _frontendUrls = frontendUrls;
@@ -85,16 +83,17 @@ public class AuthController : ControllerBase
         FarmInvitation? invitation = null;
         if (!string.IsNullOrEmpty(request.InviteToken))
         {
-            invitation = await _farmInvitationTokenService.ValidateAsync(request.InviteToken);
-            if (invitation is null)
+            var inviteResult = await _farmInvitationService.ValidateForSignUpAsync(request.InviteToken, request.Email);
+
+            switch (inviteResult.Status)
             {
-                return BadRequest(new { message = "This invitation is invalid or has expired." });
+                case SignUpInvitationStatus.InvalidOrExpired:
+                    return BadRequest(new { message = "This invitation is invalid or has expired." });
+                case SignUpInvitationStatus.EmailMismatch:
+                    return BadRequest(new { message = "This invitation was issued to a different email address." });
             }
 
-            if (!string.Equals(invitation.Email, request.Email, StringComparison.OrdinalIgnoreCase))
-            {
-                return BadRequest(new { message = "This invitation was issued to a different email address." });
-            }
+            invitation = inviteResult.Value;
         }
 
         var user = new User
@@ -116,15 +115,7 @@ public class AuthController : ControllerBase
 
         if (invitation is not null)
         {
-            await _userFarmRepository.AddAsync(new UserFarm
-            {
-                UserId = user.Id,
-                FarmId = invitation.FarmId,
-                FarmRoleTypeId = invitation.FarmRoleTypeId,
-            });
-            await _userFarmRepository.SaveChangesAsync();
-
-            await _farmInvitationTokenService.ConsumeAsync(invitation);
+            await _farmInvitationService.JoinAndConsumeAsync(user.Id, invitation);
         }
 
         var response = await IssueTokensAsync(user);

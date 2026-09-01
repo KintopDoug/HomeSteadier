@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace Homesteadier.API.Email;
+namespace Homesteadier.Services.Email;
 
 /// <summary>
 /// Composes the password-reset message. Kept apart from <see cref="IEmailSender"/> so copy

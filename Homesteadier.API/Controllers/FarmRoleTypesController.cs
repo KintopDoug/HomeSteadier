@@ -1,5 +1,5 @@
 using HomeSteadier.Models.Response.Farm;
-using Homesteadier.Repository.Repositories;
+using Homesteadier.Services.Farms;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,17 +10,17 @@ namespace Homesteadier.API.Controllers;
 [Route("api/[controller]")]
 public class FarmRoleTypesController : ControllerBase
 {
-    private readonly IFarmRoleTypeRepository _farmRoleTypeRepository;
+    private readonly IFarmRoleTypeService _farmRoleTypeService;
 
-    public FarmRoleTypesController(IFarmRoleTypeRepository farmRoleTypeRepository)
+    public FarmRoleTypesController(IFarmRoleTypeService farmRoleTypeService)
     {
-        _farmRoleTypeRepository = farmRoleTypeRepository;
+        _farmRoleTypeService = farmRoleTypeService;
     }
 
     [HttpGet]
     public async Task<ActionResult<List<FarmRoleTypeResponse>>> GetAll()
     {
-        var roleTypes = await _farmRoleTypeRepository.GetAllAsync();
-        return Ok(roleTypes.Select(FarmRoleTypeResponse.FromEntity).OrderBy(r => r.Name).ToList());
+        var roleTypes = await _farmRoleTypeService.GetAllAsync();
+        return Ok(roleTypes.Select(FarmRoleTypeResponse.FromEntity).ToList());
     }
 }

@@ -1,7 +1,8 @@
 using Azure;
 using Azure.Communication.Email;
+using Microsoft.Extensions.Logging;
 
-namespace Homesteadier.API.Email;
+namespace Homesteadier.Services.Email;
 
 /// <summary>
 /// Sends through Azure Communication Services. The ACS resource is provisioned out of band —

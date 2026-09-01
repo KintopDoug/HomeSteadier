@@ -1,5 +1,6 @@
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository.Repositories;
+using Homesteadier.Services;
 
 namespace Homesteadier.API.Auth;
 

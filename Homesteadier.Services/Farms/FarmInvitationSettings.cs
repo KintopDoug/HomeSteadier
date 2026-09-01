@@ -1,9 +1,9 @@
-namespace Homesteadier.API.Farms;
+namespace Homesteadier.Services.Farms;
 
 /// <summary>
 /// Farm invitation token configuration, bound from the "FarmInvitation" config section.
 /// </summary>
-public class FarmInvitationSettings
+internal class FarmInvitationSettings
 {
     /// <summary>
     /// How long an emailed invitation stays acceptable. Days rather than password-reset's minutes

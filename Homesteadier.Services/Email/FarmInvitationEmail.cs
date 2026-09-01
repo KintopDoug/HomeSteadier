@@ -1,12 +1,12 @@
 using System.Net;
 
-namespace Homesteadier.API.Email;
+namespace Homesteadier.Services.Email;
 
 /// <summary>
 /// Composes farm invitation messages. Kept apart from <see cref="IEmailSender"/> so copy changes
 /// don't touch transport code, and out of the controller so the action stays readable.
 /// </summary>
-public static class FarmInvitationEmail
+internal static class FarmInvitationEmail
 {
     public static (string Subject, string HtmlBody, string PlainTextBody) ComposeForExistingUser(
         string farmName,

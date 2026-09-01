@@ -8,5 +8,6 @@
   <Project Path="HomeSteadier.Database/HomeSteadier.Database.csproj" />
   <Project Path="HomeSteadier.Models/HomeSteadier.Models.csproj" />
   <Project Path="Homesteadier.Repository/Homesteadier.Repository.csproj" />
+  <Project Path="Homesteadier.Services/Homesteadier.Services.csproj" />
   <Project Path="HomeSteadier.ServiceDefaults/HomeSteadier.ServiceDefaults.csproj" />
 </Solution>

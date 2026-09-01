@@ -1,4 +1,4 @@
-namespace Homesteadier.API.Email;
+namespace Homesteadier.Services.Email;
 
 /// <summary>
 /// Outbound mail configuration. SenderAddress/SenderDisplayName are bound from the "Email"
