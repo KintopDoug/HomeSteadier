@@ -123,7 +123,7 @@ public class AuthController : ControllerBase
     }
 
     [EnableRateLimiting(AuthRateLimiting.PolicyName)]
-    [HttpPost("login")]
+    [HttpPost("Login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
         var user = await _userManager.FindByEmailAsync(request.Email);
@@ -140,7 +140,7 @@ public class AuthController : ControllerBase
         return Ok(await IssueTokensAsync(user));
     }
 
-    [HttpPost("refresh")]
+    [HttpPost("Refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh()
     {
         var rawToken = RefreshTokenCookie.Read(Request, _cookieSettings);
@@ -170,7 +170,7 @@ public class AuthController : ControllerBase
         });
     }
 
-    [HttpPost("logout")]
+    [HttpPost("Logout")]
     public async Task<IActionResult> Logout()
     {
         var rawToken = RefreshTokenCookie.Read(Request, _cookieSettings);
@@ -188,7 +188,7 @@ public class AuthController : ControllerBase
     /// whether an address has an account here.
     /// </summary>
     [EnableRateLimiting(AuthRateLimiting.PolicyName)]
-    [HttpPost("forgotPassword")]
+    [HttpPost("ForgotPassword")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
     {
@@ -225,7 +225,7 @@ public class AuthController : ControllerBase
     /// Consumes an emailed reset token, sets the new password, and signs the user in.
     /// </summary>
     [EnableRateLimiting(AuthRateLimiting.PolicyName)]
-    [HttpPost("resetPassword")]
+    [HttpPost("ResetPassword")]
     public async Task<ActionResult<AuthResponse>> ResetPassword(ResetPasswordRequest request)
     {
         var userId = await _passwordResetTokenService.ValidateAsync(request.Token);
@@ -262,7 +262,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [Authorize]
     [EnableRateLimiting(AuthRateLimiting.PolicyName)]
-    [HttpPost("changePassword")]
+    [HttpPost("ChangePassword")]
     public async Task<ActionResult<AuthResponse>> ChangePassword(ChangePasswordRequest request)
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
@@ -302,7 +302,7 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
-    [HttpGet("me")]
+    [HttpGet("Me")]
     public async Task<ActionResult<UserResponse>> Me()
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
