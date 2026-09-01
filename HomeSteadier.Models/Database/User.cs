@@ -21,7 +21,11 @@ public partial class User
 
     public bool IsActive { get; set; }
 
+    public virtual ICollection<FarmInvitation> FarmInvitations { get; set; } = new List<FarmInvitation>();
+
     public virtual ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
 
     public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+
+    public virtual ICollection<UserFarm> UserFarms { get; set; } = new List<UserFarm>();
 }

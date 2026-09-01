@@ -13,6 +13,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { session } from "../../stores/SessionStore";
 import { HeaderViewModel } from "../../viewModels/HeaderViewModel";
+import { FarmSwitcher } from "../Farm/FarmSwitcher";
 
 export const Header = observer(() => {
   const viewModel = useMemo(() => new HeaderViewModel(), []);
@@ -45,6 +46,8 @@ export const Header = observer(() => {
               Home
             </Button>
 
+            <FarmSwitcher />
+
             <ButtonBase
               onClick={(event) => viewModel.openUserMenu(event.currentTarget)}
               sx={{ borderRadius: 999, display: { xs: "none", sm: "flex" } }}
@@ -68,6 +71,16 @@ export const Header = observer(() => {
               anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
               transformOrigin={{ vertical: "top", horizontal: "right" }}
             >
+              {session.activeFarm?.roleName === "Admin" && (
+                <MenuItem
+                  component={Link}
+                  to="/invite-member"
+                  onClick={viewModel.closeUserMenu}
+                >
+                  Invite to Farm
+                </MenuItem>
+              )}
+
               <MenuItem
                 component={Link}
                 to="/change-password"

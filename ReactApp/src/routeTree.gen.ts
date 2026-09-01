@@ -13,9 +13,11 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as AcceptInvitationRouteImport } from './routes/accept-invitation'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedLivestockRouteImport } from './routes/_authenticated.livestock'
+import { Route as AuthenticatedInviteMemberRouteImport } from './routes/_authenticated.invite-member'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated.home'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated.garden'
 import { Route as AuthenticatedConstructionRouteImport } from './routes/_authenticated.construction'
@@ -41,6 +43,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AcceptInvitationRoute = AcceptInvitationRouteImport.update({
+  id: '/accept-invitation',
+  path: '/accept-invitation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -55,6 +62,12 @@ const AuthenticatedLivestockRoute = AuthenticatedLivestockRouteImport.update({
   path: '/livestock',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedInviteMemberRoute =
+  AuthenticatedInviteMemberRouteImport.update({
+    id: '/invite-member',
+    path: '/invite-member',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
   id: '/home',
   path: '/home',
@@ -80,6 +93,7 @@ const AuthenticatedChangePasswordRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/accept-invitation': typeof AcceptInvitationRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
@@ -88,10 +102,12 @@ export interface FileRoutesByFullPath {
   '/construction': typeof AuthenticatedConstructionRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/home': typeof AuthenticatedHomeRoute
+  '/invite-member': typeof AuthenticatedInviteMemberRoute
   '/livestock': typeof AuthenticatedLivestockRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/accept-invitation': typeof AcceptInvitationRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
@@ -100,12 +116,14 @@ export interface FileRoutesByTo {
   '/construction': typeof AuthenticatedConstructionRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/home': typeof AuthenticatedHomeRoute
+  '/invite-member': typeof AuthenticatedInviteMemberRoute
   '/livestock': typeof AuthenticatedLivestockRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/accept-invitation': typeof AcceptInvitationRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
@@ -114,12 +132,14 @@ export interface FileRoutesById {
   '/_authenticated/construction': typeof AuthenticatedConstructionRoute
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
+  '/_authenticated/invite-member': typeof AuthenticatedInviteMemberRoute
   '/_authenticated/livestock': typeof AuthenticatedLivestockRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accept-invitation'
     | '/forgot-password'
     | '/login'
     | '/register'
@@ -128,10 +148,12 @@ export interface FileRouteTypes {
     | '/construction'
     | '/garden'
     | '/home'
+    | '/invite-member'
     | '/livestock'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/accept-invitation'
     | '/forgot-password'
     | '/login'
     | '/register'
@@ -140,11 +162,13 @@ export interface FileRouteTypes {
     | '/construction'
     | '/garden'
     | '/home'
+    | '/invite-member'
     | '/livestock'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/accept-invitation'
     | '/forgot-password'
     | '/login'
     | '/register'
@@ -153,12 +177,14 @@ export interface FileRouteTypes {
     | '/_authenticated/construction'
     | '/_authenticated/garden'
     | '/_authenticated/home'
+    | '/_authenticated/invite-member'
     | '/_authenticated/livestock'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  AcceptInvitationRoute: typeof AcceptInvitationRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
@@ -195,6 +221,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/accept-invitation': {
+      id: '/accept-invitation'
+      path: '/accept-invitation'
+      fullPath: '/accept-invitation'
+      preLoaderRoute: typeof AcceptInvitationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -214,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/livestock'
       fullPath: '/livestock'
       preLoaderRoute: typeof AuthenticatedLivestockRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/invite-member': {
+      id: '/_authenticated/invite-member'
+      path: '/invite-member'
+      fullPath: '/invite-member'
+      preLoaderRoute: typeof AuthenticatedInviteMemberRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/home': {
@@ -252,6 +292,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedConstructionRoute: typeof AuthenticatedConstructionRoute
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
+  AuthenticatedInviteMemberRoute: typeof AuthenticatedInviteMemberRoute
   AuthenticatedLivestockRoute: typeof AuthenticatedLivestockRoute
 }
 
@@ -260,6 +301,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedConstructionRoute: AuthenticatedConstructionRoute,
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
+  AuthenticatedInviteMemberRoute: AuthenticatedInviteMemberRoute,
   AuthenticatedLivestockRoute: AuthenticatedLivestockRoute,
 }
 
@@ -270,6 +312,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  AcceptInvitationRoute: AcceptInvitationRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,

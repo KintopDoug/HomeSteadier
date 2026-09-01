@@ -2,6 +2,7 @@
 export interface RegisterRequest {
   email: string;
   firstName: string;
+  inviteToken?: string | null;
   lastName: string;
   password: string;
 }

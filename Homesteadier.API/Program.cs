@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using Azure.Communication.Email;
 using Homesteadier.API.Auth;
 using Homesteadier.API.Email;
+using Homesteadier.API.Farms;
 using Homesteadier.API.Middleware;
 using HomeSteadier.Database;
 using HomeSteadier.Models.Database;
@@ -183,6 +184,13 @@ builder.Services.AddSingleton(passwordResetSettings);
 builder.Services.AddScoped<IPasswordResetTokenService, PasswordResetTokenService>();
 builder.Services.AddScoped<IPasswordUpdateService, PasswordUpdateService>();
 builder.Services.AddSingleton(new FrontendUrls(ResolveFrontendBaseUrl(builder.Configuration)));
+
+// Farm invitations: token lifetime + the issuing/validating/consuming service, mirroring the
+// password-reset setup above.
+var farmInvitationSettings = new FarmInvitationSettings();
+builder.Configuration.GetSection("FarmInvitation").Bind(farmInvitationSettings);
+builder.Services.AddSingleton(farmInvitationSettings);
+builder.Services.AddScoped<IFarmInvitationTokenService, FarmInvitationTokenService>();
 
 // Outbound email. The ACS connection string carries an access key, so it comes from the
 // environment like JWT_SIGNING_KEY rather than appsettings.shared.json; AppHost injects it into

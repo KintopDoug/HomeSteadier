@@ -1,6 +1,9 @@
 import { makeAutoObservable } from "mobx";
 import type { AuthResponse } from "../models/response/AuthResponse";
 import type { UserResponse } from "../models/response/UserResponse";
+import type { FarmResponse } from "../models/response/FarmResponse";
+
+const ACTIVE_FARM_ID_STORAGE_KEY = "activeFarmId";
 
 /**
  * App-wide auth session. Unlike the per-page view models in src/viewModels, this is a
@@ -23,6 +26,8 @@ class Session {
   // route-guard UI added later tell "not signed in" apart from "haven't checked yet", so it
   // doesn't flash a logged-out state before the refresh cookie has had a chance to restore one.
   isInitializing = true;
+  farms: FarmResponse[] = [];
+  activeFarm: FarmResponse | null = null;
 
   constructor() {
     makeAutoObservable(this, {}, { autoBind: true });
@@ -44,6 +49,24 @@ class Session {
   signOut() {
     this.accessToken = null;
     this.user = null;
+    this.farms = [];
+    this.activeFarm = null;
+    localStorage.removeItem(ACTIVE_FARM_ID_STORAGE_KEY);
+  }
+
+  setFarms(farms: FarmResponse[]) {
+    this.farms = farms;
+  }
+
+  setActiveFarm(farm: FarmResponse) {
+    this.activeFarm = farm;
+    if (farm.id !== undefined) {
+      localStorage.setItem(ACTIVE_FARM_ID_STORAGE_KEY, String(farm.id));
+    }
+  }
+
+  getRememberedFarmId(): string | null {
+    return localStorage.getItem(ACTIVE_FARM_ID_STORAGE_KEY);
   }
 }
 
