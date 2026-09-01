@@ -13,6 +13,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { session } from "../../stores/SessionStore";
 import { HeaderViewModel } from "../../viewModels/HeaderViewModel";
+import { FarmSwitcher } from "../Farm/FarmSwitcher";
 
 export const Header = observer(() => {
   const viewModel = useMemo(() => new HeaderViewModel(), []);
@@ -44,6 +45,8 @@ export const Header = observer(() => {
             <Button component={Link} to="/home" color="inherit">
               Home
             </Button>
+
+            <FarmSwitcher />
 
             <ButtonBase
               onClick={(event) => viewModel.openUserMenu(event.currentTarget)}
