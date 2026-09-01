@@ -1,4 +1,4 @@
-namespace Homesteadier.API.Email;
+namespace Homesteadier.Services.Email;
 
 /// <summary>
 /// Transport for outbound mail. Deliberately knows nothing about templates — composing a

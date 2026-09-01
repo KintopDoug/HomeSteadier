@@ -1,4 +1,6 @@
-namespace Homesteadier.API.Email;
+using Microsoft.Extensions.Logging;
+
+namespace Homesteadier.Services.Email;
 
 /// <summary>
 /// Development fallback used when ACS isn't configured. Writes the whole message — including the

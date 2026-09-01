@@ -4,6 +4,21 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      CS8509 = a switch expression isn't exhaustive. Controllers map the services' status enums
+      onto HTTP responses via switch expressions with no discard arm, so adding a status without
+      giving it a response is exactly this warning. As a warning it's easy to scroll past and the
+      failure surfaces as a 500 at runtime; as an error the build stops and names the missing
+      member. A `_ =>` discard arm would suppress it entirely, which is why there isn't one.
+    -->
+    <WarningsAsErrors>$(WarningsAsErrors);CS8509</WarningsAsErrors>
+    <!--
+      CS8524 = those same switches don't cover *unnamed* enum values (an out-of-range int cast into
+      the enum). Unavoidable without a discard arm, and a discard arm would defeat CS8509 above, so
+      silence this one instead. These statuses only ever come from the services' own factory
+      methods; if an unnamed value somehow arose, SwitchExpressionException fails the request fast.
+    -->
+    <NoWarn>$(NoWarn);CS8524</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +32,7 @@
     <ProjectReference Include="..\HomeSteadier.ServiceDefaults\HomeSteadier.ServiceDefaults.csproj" />
     <ProjectReference Include="..\HomeSteadier.Database\HomeSteadier.Database.csproj" />
     <ProjectReference Include="..\Homesteadier.Repository\Homesteadier.Repository.csproj" />
+    <ProjectReference Include="..\Homesteadier.Services\Homesteadier.Services.csproj" />
   </ItemGroup>
 
   <ItemGroup>

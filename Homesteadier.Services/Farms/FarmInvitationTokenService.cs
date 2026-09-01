@@ -1,10 +1,10 @@
-using Homesteadier.API.Auth;
+using Homesteadier.Services;
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository.Repositories;
 
-namespace Homesteadier.API.Farms;
+namespace Homesteadier.Services.Farms;
 
-public interface IFarmInvitationTokenService
+internal interface IFarmInvitationTokenService
 {
     /// <summary>
     /// Issues an invitation token for the (farm, email) pair, first consuming any outstanding ones
@@ -31,7 +31,7 @@ public interface IFarmInvitationTokenService
 /// Farm invitation tokens, modelled on <see cref="PasswordResetTokenService"/>: a high-entropy
 /// opaque value stored only as a hash, single-use, and time-limited.
 /// </summary>
-public class FarmInvitationTokenService : IFarmInvitationTokenService
+internal class FarmInvitationTokenService : IFarmInvitationTokenService
 {
     private readonly IFarmInvitationRepository _repository;
     private readonly FarmInvitationSettings _settings;

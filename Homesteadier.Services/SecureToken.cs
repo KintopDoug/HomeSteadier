@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services;
 
 /// <summary>
 /// Opaque bearer-secret primitives shared by the refresh-token and password-reset flows:
@@ -14,7 +14,7 @@ namespace Homesteadier.API.Auth;
 /// <see cref="Convert.ToHexString"/> produces, silently invalidates every stored token — every
 /// signed-in user is logged out and nothing anywhere reports an error.
 /// </summary>
-internal static class SecureToken
+public static class SecureToken
 {
     public static string Generate()
         => Base64UrlEncode(RandomNumberGenerator.GetBytes(32));

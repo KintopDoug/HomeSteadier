@@ -1,4 +1,4 @@
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services;
 
 /// <summary>
 /// The SPA's origin, used to build links the API emails to users (currently just password
