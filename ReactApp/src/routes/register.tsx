@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { SignUp } from "../pages/signUp";
+import { SignUp } from "../pages/SignUp";
 
 const registerSearchSchema = z.object({
   inviteToken: z.string().optional().catch(undefined),
