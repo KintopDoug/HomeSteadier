@@ -1,4 +1,5 @@
 using Aspire.Hosting.ApplicationModel;
+using Azure.Provisioning.Primitives;
 using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -84,6 +85,21 @@ else
 
 var postgres = builder.AddAzurePostgresFlexibleServer("pgsql")
     .WithPasswordAuthentication(userName: postgresUser, password: postgresPassword)
+    // Azure is retiring Microsoft.DBforPostgreSQL API versions at/before 2025-06-01-preview.
+    // No Azure.Provisioning.PostgreSql release (stable 1.1.1, or beta 1.2.0-betas) defaults past
+    // 2025-08-01 yet, so override explicitly rather than waiting on a package bump. This walks
+    // every resource Aspire generates for this module (server, firewall rules, database) and
+    // bumps each to the current GA version.
+    .ConfigureInfrastructure(infra =>
+    {
+        foreach (var resource in infra.GetProvisionableResources().OfType<ProvisionableResource>())
+        {
+            if (resource.ResourceType.ToString().StartsWith("Microsoft.DBforPostgreSQL/", StringComparison.Ordinal))
+            {
+                resource.ResourceVersion = "2026-10-01";
+            }
+        }
+    })
     .RunAsContainer(container => container
         .WithImage("pgvector/pgvector", "pg17")
         .WithDataVolume(databaseName)
