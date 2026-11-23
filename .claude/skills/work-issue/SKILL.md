@@ -41,19 +41,37 @@ cd ReactApp && npm install && npm run lint && npm run build
 
 Fix failures you caused. If a failure pre-exists on `main`, say so in the PR rather than hiding it. If a change is observable in the app, run it (Aspire or the dev server) and check it; if you could not, say that explicitly. Do not claim something works that you did not run.
 
-## 5. Commit and PR
+## 5. Independent review (before any PR exists)
 
-- Commit message: `#<n>: <summary>`. One logical commit is fine; no `--no-verify`.
+Commit your work on the branch first (so `git diff origin/main...HEAD` shows it), then hand it to the
+**`pre-pr-reviewer`** subagent via the Agent/Task tool, passing only the issue number and the instruction to
+review the branch. It has fresh context, is read-only, and must not be briefed on your reasoning — do not
+explain or defend your choices to it, that defeats the point.
+
+- `APPROVE` → continue to step 6.
+- `CHANGES_REQUESTED` → fix each blocker (or, if you disagree, decide why and note it for the PR body),
+  re-run step 4, amend or add a commit, and run the reviewer again. **At most 2 review rounds.**
+- Still `CHANGES_REQUESTED` after round 2, or the reviewer reports an unmet issue requirement you cannot
+  meet: open the PR as a **draft**, add the `needs-human` label to the issue, and put the unresolved
+  blockers verbatim at the top of the PR body.
+- If the Agent/Task tool is unavailable, say so in the PR body ("no independent pre-PR review ran") and open
+  it as a draft. Never write a review verdict yourself and present it as independent.
+
+Keep the reviewer's final verdict, issue coverage, and any nits you chose not to fix for the PR body.
+
+## 6. Commit and PR
+
+- Commit message: `#<n>: <summary>`. One logical commit is fine; no `--no-verify`. (Already committed in step 5; add fix-up commits there.)
 - Push the branch and open the PR against `main`:
 
 ```bash
 gh pr create --base main --title "#<n>: <summary>" --body-file <tmpfile>
 ```
 
-PR body: `Closes #<n>`; what changed and why (2–5 bullets); **how it was verified** (exact commands, and what was *not* verified); risks / things the reviewer should look at hardest; any follow-up issues you noticed.
+PR body: `Closes #<n>`; what changed and why (2–5 bullets); **how it was verified** (exact commands, and what was *not* verified); **pre-PR review** (rounds run, final verdict, nits left unfixed); risks / things the reviewer should look at hardest; any follow-up issues you noticed.
 - Open as **draft** (`--draft`) if the change touches auth, migrations, infra, or you could not fully verify it.
 - Never merge, never enable auto-merge, never push to `main`. A human reviews and merges — merging to `main` triggers an Azure deploy.
 
-## 6. Report
+## 7. Report
 
 Tell the user: the PR link, what was verified, and what you are unsure about. Then stop — one issue per invocation.
