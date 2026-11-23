@@ -29,7 +29,7 @@ export const Header = observer(() => {
         <Box
           component={Link}
           to="/"
-          sx={{ display: "flex", alignItems: "center", textDecoration: "none" }}
+          sx={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0 }}
         >
           <img
             className="site-header-logo"
@@ -41,8 +41,17 @@ export const Header = observer(() => {
         <Box sx={{ flexGrow: 1 }} />
 
         {session.isInitializing ? null : session.isAuthenticated ? (
-          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
-            <Button component={Link} to="/home" color="inherit">
+          <Stack
+            direction="row"
+            spacing={{ xs: 0.5, sm: 2 }}
+            sx={{ alignItems: "center", minWidth: 0 }}
+          >
+            <Button
+              component={Link}
+              to="/home"
+              color="inherit"
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
               Home
             </Button>
 
@@ -50,7 +59,8 @@ export const Header = observer(() => {
 
             <ButtonBase
               onClick={(event) => viewModel.openUserMenu(event.currentTarget)}
-              sx={{ borderRadius: 999, display: { xs: "none", sm: "flex" } }}
+              aria-label="Open user menu"
+              sx={{ borderRadius: 999 }}
             >
               <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <Avatar
@@ -58,7 +68,13 @@ export const Header = observer(() => {
                 >
                   {session.user?.email?.[0]?.toUpperCase()}
                 </Avatar>
-                <Typography variant="body2" color="text.secondary">
+                {/* The avatar is the only entry point to the user menu, so it must stay visible
+                    on mobile; only the email text is dropped on narrow screens. */}
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ display: { xs: "none", sm: "block" } }}
+                >
                   {session.user?.email}
                 </Typography>
               </Stack>
@@ -71,6 +87,16 @@ export const Header = observer(() => {
               anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
               transformOrigin={{ vertical: "top", horizontal: "right" }}
             >
+              {/* Home moves into the menu on narrow screens to leave room for the farm name. */}
+              <MenuItem
+                component={Link}
+                to="/home"
+                onClick={viewModel.closeUserMenu}
+                sx={{ display: { xs: "flex", sm: "none" } }}
+              >
+                Home
+              </MenuItem>
+
               {session.activeFarm?.roleName === "Admin" && (
                 <MenuItem
                   component={Link}
@@ -94,6 +120,7 @@ export const Header = observer(() => {
               variant="outlined"
               size="small"
               onClick={viewModel.logout}
+              sx={{ whiteSpace: "nowrap", flexShrink: 0 }}
               disabled={viewModel.isLoggingOut}
             >
               Sign Out
