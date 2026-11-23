@@ -1,0 +1,15 @@
+{
+  "name": "homesteadier-qa",
+  "private": true,
+  "type": "module",
+  "description": "Functional QA harness: Playwright fixtures + report renderer used by .github/workflows/qa.yml",
+  "scripts": {
+    "test": "playwright test",
+    "report": "node render-report.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2"
+  }
+}
