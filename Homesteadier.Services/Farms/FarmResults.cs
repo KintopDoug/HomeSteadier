@@ -44,6 +44,14 @@ public enum CreateFarmStatus
     OwnerRoleMissing,
 }
 
+public enum UpdateFarmStatus
+{
+    Success,
+
+    /// <summary>The caller isn't an admin of the farm (non-members included, so farm ids can't be probed).</summary>
+    NotFarmAdmin,
+}
+
 public enum CreateFarmInvitationStatus
 {
     Success,

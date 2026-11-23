@@ -12,6 +12,9 @@ public interface IFarmService
 
     /// <summary>Creates a farm and makes the creator its admin. Returns the new membership.</summary>
     Task<FarmResult<CreateFarmStatus, UserFarm>> CreateAsync(int userId, CreateFarmRequest request);
+
+    /// <summary>Updates a farm's details. Only an admin of the farm may do so.</summary>
+    Task<FarmResult<UpdateFarmStatus, UserFarm>> UpdateAsync(int userId, int farmId, UpdateFarmRequest request);
 }
 
 /// <summary>
@@ -91,5 +94,39 @@ internal class FarmService : IFarmService
         await _userFarmRepository.SaveChangesAsync();
 
         return FarmResult<CreateFarmStatus, UserFarm>.Succeeded(CreateFarmStatus.Success, userFarm);
+    }
+
+    public async Task<FarmResult<UpdateFarmStatus, UserFarm>> UpdateAsync(
+        int userId, int farmId, UpdateFarmRequest request)
+    {
+        var membership = await _userFarmRepository.GetByUserAndFarmAsync(userId, farmId);
+        if (membership is null || membership.FarmRoleType.Name != OwnerRoleName)
+        {
+            return FarmResult<UpdateFarmStatus, UserFarm>.Failed(UpdateFarmStatus.NotFarmAdmin);
+        }
+
+        var farm = await _farmRepository.GetByIdAsync(farmId);
+        if (farm is null)
+        {
+            // The membership exists, so the farm row should too (FK); treat as not admin.
+            return FarmResult<UpdateFarmStatus, UserFarm>.Failed(UpdateFarmStatus.NotFarmAdmin);
+        }
+
+        farm.Name = request.Name;
+        farm.AddressLine = request.AddressLine;
+        farm.City = request.City;
+        farm.State = request.State;
+        farm.PostalCode = request.PostalCode;
+        farm.Country = request.Country;
+        farm.Latitude = request.Latitude;
+        farm.Longitude = request.Longitude;
+        // No DB trigger maintains updated_at, so stamp it here (Unspecified kind, as UserStore does).
+        farm.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        await _farmRepository.UpdateAsync(farm);
+        await _farmRepository.SaveChangesAsync();
+
+        membership.Farm = farm;
+        return FarmResult<UpdateFarmStatus, UserFarm>.Succeeded(UpdateFarmStatus.Success, membership);
     }
 }
