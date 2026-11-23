@@ -1,0 +1,7 @@
+published/
+node_modules/
+test-results/
+results.json
+evidence/
+report.md
+tests/qa.spec.ts

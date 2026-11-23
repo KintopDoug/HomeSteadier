@@ -119,3 +119,21 @@ jobs:
           claude_args: >-
             --max-turns 25
             --allowedTools "Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)"
+
+  # Functional QA, once per PR: after the FIRST successful review (opened / ready_for_review, not on
+  # every push). Re-run later with `gh workflow run qa.yml -f pr_number=<n>`. See qa.yml for the design.
+  qa:
+    needs: review
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action != 'synchronize' &&
+      needs.review.result == 'success'
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      id-token: write
+    uses: ./.github/workflows/qa.yml
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets: inherit
