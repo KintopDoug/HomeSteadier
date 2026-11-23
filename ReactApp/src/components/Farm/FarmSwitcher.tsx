@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { observer } from "mobx-react-lite";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -25,8 +26,11 @@ export const FarmSwitcher = observer(() => {
         onClick={(event) => viewModel.openMenu(event.currentTarget)}
         color="inherit"
         endIcon={<ArrowDropDownIcon />}
+        sx={{ minWidth: 0, maxWidth: { xs: 110, sm: "none" }, whiteSpace: "nowrap" }}
       >
-        {session.activeFarm?.name ?? "Select Farm"}
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {session.activeFarm?.name ?? "Select Farm"}
+        </Box>
       </Button>
 
       <Menu
