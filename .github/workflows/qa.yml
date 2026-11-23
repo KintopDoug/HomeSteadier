@@ -1,0 +1,368 @@
+# Functional QA of a pull request, in four stages. The split is the security design:
+#
+#   plan     Claude (holds the token)  reads issue + diff, writes acceptance criteria + a Playwright spec.
+#                                      Runs NO PR code.
+#   run      NO secrets                boots Postgres + API + web from the PR, runs the spec in a real
+#                                      browser with video + screenshots.
+#   publish  contents:write only       renders a deterministic report from Playwright's results and puts
+#                                      the screenshots/videos on the `qa-evidence` branch. No Claude.
+#   report   Claude (holds the token)  looks at the evidence, writes the verdict, and the PR comment is
+#                                      posted. Reads files only; runs NO PR code.
+#
+# Code from the PR only ever executes in `run`, which has no secrets and no persisted git credentials.
+#
+# Called from claude.yml after the first review of a PR. Re-run by hand with:
+#   gh workflow run qa.yml -f pr_number=<n>
+name: QA
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to QA
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: qa-pr-${{ inputs.pr_number }}
+  cancel-in-progress: true
+
+env:
+  PR: ${{ inputs.pr_number }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    outputs:
+      applicable: ${{ steps.decide.outputs.applicable }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
+          fetch-depth: 0
+          persist-credentials: false
+      # Skill text comes from the default branch, not the PR, so a PR cannot rewrite its own QA brief.
+      - name: Use trusted skills and checklist from the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPO: ${{ github.repository }}
+        run: |
+          git fetch --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$DEFAULT_BRANCH"
+          git checkout FETCH_HEAD -- .claude CLAUDE.md qa/fixtures.ts
+          mkdir -p qa-out
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: "claude"
+          prompt: |
+            Act as the functional QA tester for PR #${{ inputs.pr_number }} by following
+            .claude/skills/qa-plan/SKILL.md exactly. Write only to qa-out/. Do not run the app.
+          claude_args: >-
+            --max-turns 30
+            --allowedTools "Read,Glob,Grep,Write,Bash(mkdir:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+      - id: decide
+        run: |
+          if [ -s qa-out/qa.spec.ts ] && [ "$(tr -d '[:space:]' < qa-out/applicable.txt 2>/dev/null)" = "true" ]; then
+            echo "applicable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applicable=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-plan
+          path: qa-out/
+          if-no-files-found: ignore
+
+  run:
+    needs: plan
+    if: needs.plan.outputs.applicable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # NO secrets, read-only token, no persisted credentials: this job executes the PR's code.
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: homesteadier_admin
+          POSTGRES_PASSWORD: qa-ci-throwaway
+          POSTGRES_DB: homesteadier-db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U homesteadier_admin -d homesteadier-db"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: harness
+          sparse-checkout: qa
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: qa-plan
+          path: qa-plan
+      - name: Reject specs that do more than drive the browser and API
+        run: |
+          spec=qa-plan/qa.spec.ts
+          : > notes.txt
+          bad_calls=$(grep -nE 'process\.|child_process|require\(|import\(|node:|\beval\b|new Function|globalThis|XMLHttpRequest' "$spec" || true)
+          bad_imports=$(grep -nE '^\s*(import|export)\b.*\bfrom\b' "$spec" | grep -vE "from\s+['\"](@playwright/test|\.\./fixtures)['\"]" || true)
+          if [ -n "$bad_calls$bad_imports" ]; then
+            { echo "Spec rejected before running; it uses something outside @playwright/test and ../fixtures:"; echo "$bad_calls"; echo "$bad_imports"; } | tee -a notes.txt
+            exit 1
+          fi
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install harness and browser
+        working-directory: harness/qa
+        run: |
+          # Lockfile is Windows-generated; fall back to install if npm ci rejects it (see CLAUDE.md on ReactApp).
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build and start API
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:5128
+          POSTGRES_PASSWORD: qa-ci-throwaway
+          # Throwaway key for an ephemeral stack; not a repository secret.
+          JWT_SIGNING_KEY: qa-ci-throwaway-signing-key-0123456789abcdef
+          # Plain-http localhost cannot carry a Secure/SameSite=None cookie in every browser build.
+          RefreshCookie__SameSite: Lax
+          RefreshCookie__Secure: "false"
+        run: |
+          dotnet build app/Homesteadier.API -c Release --nologo -v q
+          nohup dotnet run --no-build -c Release --no-launch-profile --project app/Homesteadier.API > api.log 2>&1 &
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:5128/health > /dev/null && exit 0
+            sleep 2
+          done
+          { echo "API never became healthy (migrations/startup). Last log lines:"; tail -40 api.log; } | tee -a notes.txt
+          exit 1
+      - name: Start web
+        env:
+          VITE_API_URL: http://localhost:5128
+        run: |
+          npm --prefix app/ReactApp install --no-audit --no-fund
+          nohup npm --prefix app/ReactApp run dev -- --port 5173 --strictPort > web.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:5173/ > /dev/null && exit 0
+            sleep 2
+          done
+          { echo "Web never came up. Last log lines:"; tail -40 web.log; } | tee -a notes.txt
+          exit 1
+      - name: Run the QA spec
+        working-directory: harness/qa
+        env:
+          QA_WEB_URL: http://localhost:5173
+          QA_API_URL: http://localhost:5128
+        run: |
+          cp ../../qa-plan/qa.spec.ts tests/qa.spec.ts
+          set +e
+          npx playwright test
+          echo "playwright exit code: $?" >> ../../notes.txt
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-evidence
+          path: |
+            harness/qa/test-results
+            harness/qa/results.json
+            api.log
+            web.log
+            notes.txt
+          if-no-files-found: ignore
+
+  publish:
+    needs: [plan, run]
+    if: always() && needs.plan.outputs.applicable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: qa
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: qa-plan
+          path: qa-plan
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: qa-evidence
+          path: qa-evidence
+      - name: Render report
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          mkdir -p published/evidence
+          base="https://raw.githubusercontent.com/${REPO}/qa-evidence/pr-${PR}/run-${RUN_ID}"
+          if [ -f qa-evidence/harness/qa/results.json ]; then
+            node qa/render-report.mjs \
+              --results qa-evidence/harness/qa/results.json \
+              --test-results qa-evidence/harness/qa/test-results \
+              --plan qa-plan/plan.md --out published --base-url "$base"
+          else
+            { echo "### No test results were produced"; echo; echo "The stack failed to start or the spec was rejected before running."; echo
+              echo '```'; tail -60 qa-evidence/notes.txt 2>/dev/null || echo "(no notes)"; echo '```'; } > published/report.md
+          fi
+      # Screenshots and videos go on an orphan branch so the PR comment can embed them. Only .png/.webm
+      # files that render-report.mjs size-capped and copied are published; nothing is executed here.
+      - name: Publish evidence to the qa-evidence branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          [ -n "$(ls -A published/evidence 2>/dev/null)" ] || { echo "no evidence files to publish"; exit 0; }
+          mkdir -p ev && cd ev
+          git init -q -b qa-evidence
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          if git ls-remote --exit-code --heads origin qa-evidence > /dev/null 2>&1; then
+            git fetch -q --depth 1 origin qa-evidence
+            git reset -q --hard FETCH_HEAD
+          fi
+          dest="pr-${PR}/run-${RUN_ID}"
+          mkdir -p "$dest"
+          cp -r ../published/evidence "$dest/"
+          git add -A
+          git commit -q -m "QA evidence for PR #${PR} (run ${RUN_ID})"
+          for attempt in 1 2 3; do
+            git push -q origin HEAD:qa-evidence && exit 0
+            git fetch -q --depth 1 origin qa-evidence && git rebase -q FETCH_HEAD || true
+          done
+          echo "could not push evidence branch" >&2
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-published
+          path: published/
+          if-no-files-found: ignore
+
+  report:
+    needs: [plan, run, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      # Trusted skill/brief from the default branch; the PR cannot influence how its evidence is judged.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: qa-plan
+          path: qa-plan
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: qa-published
+          path: published
+      - id: mode
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          APPLICABLE: ${{ needs.plan.outputs.applicable }}
+        run: |
+          if [ "$PLAN_RESULT" != "success" ]; then mode=plan-failed
+          elif [ "$APPLICABLE" != "true" ]; then mode=na
+          elif [ ! -f published/counts.json ]; then mode=no-results
+          else mode=judge; fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+      - uses: anthropics/claude-code-action@v1
+        if: steps.mode.outputs.mode == 'judge'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: "claude"
+          prompt: |
+            Judge the QA evidence for PR #${{ inputs.pr_number }} by following
+            .claude/skills/qa-report/SKILL.md exactly. Write verdict.txt and assessment.md only.
+          claude_args: >-
+            --max-turns 30
+            --allowedTools "Read,Glob,Grep,Write"
+      - name: Post QA comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.mode.outputs.mode }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          verdict=$(tr -d '[:space:]' < verdict.txt 2>/dev/null | tr a-z A-Z || true)
+          case "$MODE" in
+            na)          verdict=NOT_APPLICABLE ;;
+            plan-failed) verdict=INCONCLUSIVE ;;
+            no-results)  verdict=INCONCLUSIVE ;;
+          esac
+          case "$verdict" in PASS|FAIL|INCONCLUSIVE|NOT_APPLICABLE) ;; *) verdict=INCONCLUSIVE ;; esac
+          case "$verdict" in
+            PASS) badge="✅ PASS" ;; FAIL) badge="❌ FAIL" ;;
+            NOT_APPLICABLE) badge="⏭️ NOT APPLICABLE" ;; *) badge="⚠️ INCONCLUSIVE" ;;
+          esac
+          {
+            echo "<!-- qa-report -->"
+            echo "## Functional QA — $badge"
+            echo
+            case "$MODE" in
+              na)
+                echo "No user- or API-observable behaviour changed, so there is nothing to test functionally."
+                [ -f qa-plan/plan.md ] && { echo; echo "> $(head -c 600 qa-plan/plan.md | tr '\n' ' ')"; } ;;
+              plan-failed)
+                echo "The QA planning stage failed, so no acceptance criteria were tested. See the run log." ;;
+              *)
+                [ -f assessment.md ] && { cat assessment.md; echo; }
+                [ -f published/report.md ] && cat published/report.md ;;
+            esac
+            echo
+            echo "---"
+            echo "Evidence screenshots and videos are on the \`qa-evidence\` branch; the full run, traces and logs are in the [workflow run]($RUN_URL#artifacts)."
+            echo "Generated by the QA agent. A human still decides whether to merge. Re-run with \`gh workflow run qa.yml -f pr_number=$PR\`."
+          } > comment.md
+          # Defuse @mentions that originate from test names / page text, and stay under GitHub's size limit.
+          sed -i 's/@/@\xe2\x80\x8b/g' comment.md
+          head -c 60000 comment.md > comment.trunc && mv comment.trunc comment.md
+          gh pr comment "$PR" --body-file comment.md
+          echo "verdict=$verdict" >> "$GITHUB_STEP_SUMMARY"
+          [ "$verdict" != "FAIL" ]
