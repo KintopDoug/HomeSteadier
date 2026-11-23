@@ -61,7 +61,9 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           git fetch --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$DEFAULT_BRANCH"
-          git checkout FETCH_HEAD -- .claude CLAUDE.md qa/fixtures.ts
+          git checkout FETCH_HEAD -- .claude CLAUDE.md
+          # Absent on the default branch only until the PR that introduces qa/ is merged.
+          git checkout FETCH_HEAD -- qa/fixtures.ts 2>/dev/null || echo "qa/fixtures.ts not on $DEFAULT_BRANCH yet; using the PR's copy"
           mkdir -p qa-out
       - uses: anthropics/claude-code-action@v1
         with:
