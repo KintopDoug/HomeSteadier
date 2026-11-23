@@ -162,3 +162,6 @@ artifacts/
 
 # Test Results
 TestResults/
+
+# The QA harness lockfile is committed so CI installs exactly the pinned Playwright toolchain.
+!qa/package-lock.json
