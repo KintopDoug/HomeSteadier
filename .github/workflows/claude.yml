@@ -1,0 +1,113 @@
+# Runs Claude Code on GitHub's runners.
+#   * Label an issue `claude-ready`  -> Claude works it per .claude/skills/work-issue and opens a PR.
+#   * Comment `@claude ...` on an issue/PR (owner only) -> Claude responds / pushes fixes.
+#   * Every PR gets a Claude review.
+#
+# One-time setup: install https://github.com/apps/claude on the repo and add the repo secret
+# CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) or ANTHROPIC_API_KEY (swap the input below).
+#
+# SECURITY: this is a public repo. Issue/comment text is attacker-controlled, so every job that can
+# write code is gated on the repository owner. Do not loosen these `if:` conditions.
+name: Claude
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+jobs:
+  work-issue:
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.label.name == 'claude-ready' &&
+      github.event.sender.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Work GitHub issue #${{ github.event.issue.number }} by following
+            .claude/skills/work-issue/SKILL.md exactly, including its eligibility checks,
+            branch naming, verification and PR rules. Never merge. If the issue is blocked
+            or ambiguous, comment on it explaining why and stop.
+          claude_args: >-
+            --max-turns 60
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*)"
+
+  mention:
+    if: >-
+      (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+      contains(github.event.comment.body, '@claude') &&
+      github.event.comment.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*)"
+
+  review:
+    # Read-only: reviews never push. Skipped for fork PRs, which have no access to secrets.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }}. Read CLAUDE.md first.
+            Check: does it actually resolve the linked issue; correctness bugs; edits to
+            generated/scaffolded files that CLAUDE.md forbids; auth/secret/CORS/migration risk;
+            anything that would break the Azure deploy on merge. Post inline comments for real
+            problems only and one short summary comment. Do not push commits.
+          claude_args: --max-turns 15

@@ -1,0 +1,41 @@
+# Build + lint gate for pull requests (including PRs opened by Claude).
+# The only other workflow (azure-test.yml) runs on push to main, i.e. after merge,
+# so without this nothing checks a PR before it can deploy.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+      - run: dotnet build HomeSteadier.slnx --configuration Release
+
+  react:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ReactApp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # npm install, not npm ci: the Windows-generated lockfile prunes Linux-only optional deps.
+      - run: npm install
+      - run: npm run lint
+      - run: npm run build
