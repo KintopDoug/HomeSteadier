@@ -1,9 +1,19 @@
-# Run when commits are pushed to main (i.e. a PR is merged)
+# Run when commits are pushed to main (i.e. a PR is merged), unless EVERY file in the push is
+# something that cannot change the deployed application. A push that touches any other file
+# (including a mix of workflow and app files) still deploys. This is a deny-list on purpose: a new
+# top-level folder or file defaults to deploying, so the failure mode is a spare deploy, never a
+# missed one. To deploy by hand regardless (e.g. after editing this file), use workflow_dispatch.
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+    paths-ignore:
+      - ".github/**"   # workflows and templates, including this file
+      - ".claude/**"   # agent skills and config
+      - "qa/**"        # functional QA harness
+      - "docs/**"
+      - "**/*.md"      # README, CLAUDE.md, agent skill docs
 
 # Set up permissions for deploying with secretless Azure federated credentials
 # https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#set-up-azure-login-with-openid-connect-authentication
