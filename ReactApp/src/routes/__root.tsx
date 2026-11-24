@@ -3,6 +3,7 @@ import { isAxiosError } from "axios";
 import { Layout } from "../components/Layout/Layout";
 import { AuthApi } from "../api/AuthApi";
 import { session } from "../stores/SessionStore";
+import { loadFarms } from "../stores/loadFarms";
 
 // Cached rather than re-run on every navigation — beforeLoad on the root route fires on
 // every navigation (not just the first), but the session only ever needs restoring once
@@ -21,6 +22,14 @@ function restoreSession(): Promise<void> {
       try {
         const response = await AuthApi.refreshAsync();
         session.signIn(response);
+        // Hydrate farms + active farm here (not per page) so a hard refresh on any route
+        // has the role-gated state (invite page, header menu, farm switcher). The role comes
+        // from the server each time, so lost admin privileges still show the error.
+        try {
+          await loadFarms();
+        } catch (farmError) {
+          console.error("Failed to load farms", farmError);
+        }
       } catch (error) {
         if (!isAxiosError(error) || error.response?.status !== 401) {
           console.error("Failed to restore session", error);
