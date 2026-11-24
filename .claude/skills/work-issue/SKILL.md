@@ -21,12 +21,16 @@ Never commit to `main`. Branch from fresh `origin/main` using the repo's convent
 
 ```bash
 git fetch origin
-git switch --no-track -c wip/main/dkintop/<n>-<kebab-slug> origin/main
+git switch --no-track -c wip/main/claude/<n>-<kebab-title> origin/main
 ```
 
 `--no-track` matters: without it the new branch tracks `origin/main`, and a bare `git push` aims at `main`.
 
-(Use the existing `wip/main/<owner-handle>/<n>-<slug>` shape; the handle is `dkintop`.) If the working tree is dirty, stop and ask.
+The name is always `wip/<base branch>/claude/<issue number>-<issue title>`, where the title is lowercased, every run of
+characters other than `a-z0-9` becomes one `-`, and it is trimmed to about 50 characters at a word boundary
+(e.g. issue 44 "Bug: Invite to farm page displays error..." -> `wip/main/claude/44-bug-invite-to-farm-page-displays-error-when`). In
+unattended GitHub runs the workflow computes the name and tells you; use it exactly. If the working tree is dirty,
+stop and ask.
 
 ## 3. Implement
 

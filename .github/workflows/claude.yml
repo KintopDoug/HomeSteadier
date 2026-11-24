@@ -46,6 +46,30 @@ jobs:
       - name: Prepare hand-off directory
         run: mkdir -p "$RUNNER_TEMP/agent"
 
+      # Work branch name: wip/<base branch>/claude/<issue number>-<issue title>. Computed here, not by the
+      # model, so it is always well-formed. The title is attacker-controlled (public repo), so it goes in
+      # via env (never interpolated into the script) and is reduced to [a-z0-9-] before use.
+      - name: Compute work branch name
+        id: branch
+        env:
+          BASE: ${{ github.event.repository.default_branch }}
+          NUM: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+        run: |
+          full=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+          slug=${full:0:50}
+          # Cut at a word boundary rather than mid-word.
+          if [ "${#full}" -gt 50 ] && [ "${full:50:1}" != "-" ]; then slug=${slug%-*}; fi
+          slug=${slug%-}
+          [ -n "$slug" ] || slug=issue
+          name="wip/${BASE}/claude/${NUM}-${slug}"
+          # A re-run for the same issue must not collide with a branch pushed by an earlier run.
+          if git ls-remote --exit-code --heads origin "$name" > /dev/null 2>&1; then
+            name="${name}-${GITHUB_RUN_NUMBER}"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "work branch: $name"
+
       # The work runs as three SEPARATE agent processes, not one agent calling a subagent: in an unattended
       # run, subagents are asynchronous and the process exits when the main agent ends its turn, so an
       # agent that "waits for the reviewer" simply never returns (issue #44's first run did exactly that:
@@ -64,7 +88,8 @@ jobs:
             - Do NOT push, do NOT open a PR, and do NOT use any Agent/Task/subagent tool. Separate later
               stages, each its own process, review your commit, push, and open the PR. Ending your turn
               ends your process.
-            - Create the branch with `git switch --no-track -c wip/main/dkintop/<n>-<slug> origin/main`.
+            - Create the branch with EXACTLY this name (it is computed for you; do not alter it):
+              `git switch --no-track -c ${{ steps.branch.outputs.name }} origin/${{ github.event.repository.default_branch }}`.
             - Write `${{ runner.temp }}/agent/implement.md`. Its FIRST line must be exactly
               `STATUS: committed` or `STATUS: stopped`. Then: branch name; what changed and why (2-5
               bullets); the exact verification commands you ran and their results; what you could NOT
@@ -79,9 +104,11 @@ jobs:
       - if: always()
         run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-1-implement.json" 2>/dev/null || true
       - id: gate
+        env:
+          BASE: ${{ github.event.repository.default_branch }}
         run: |
           f="$RUNNER_TEMP/agent/implement.md"
-          commits=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+          commits=$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)
           if [ -f "$f" ] && [ "$(head -1 "$f" | tr -d '\r')" = "STATUS: committed" ] && [ "$commits" -gt 0 ]; then
             echo "committed=true" >> "$GITHUB_OUTPUT"
           else
