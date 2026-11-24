@@ -21,8 +21,10 @@ Never commit to `main`. Branch from fresh `origin/main` using the repo's convent
 
 ```bash
 git fetch origin
-git switch -c wip/main/dkintop/<n>-<kebab-slug> origin/main
+git switch --no-track -c wip/main/dkintop/<n>-<kebab-slug> origin/main
 ```
+
+`--no-track` matters: without it the new branch tracks `origin/main`, and a bare `git push` aims at `main`.
 
 (Use the existing `wip/main/<owner-handle>/<n>-<slug>` shape; the handle is `dkintop`.) If the working tree is dirty, stop and ask.
 
@@ -42,6 +44,12 @@ cd ReactApp && npm install && npm run lint && npm run build
 Fix failures you caused. If a failure pre-exists on `main`, say so in the PR rather than hiding it. If a change is observable in the app, run it (Aspire or the dev server) and check it; if you could not, say that explicitly. Do not claim something works that you did not run.
 
 ## 5. Independent review (before any PR exists)
+
+> **Unattended GitHub runs do not use this step.** There, `claude.yml` runs implement -> review -> finalize as
+> three separate processes, because a subagent is asynchronous and the process exits when you end your turn,
+> so waiting for it loses all your work. In that mode you stop after step 4 (commit locally, write the
+> hand-off file named in your prompt). The rest of this step is for interactive, local use, where you must
+> still keep working until the reviewer's result actually arrives. Never end your turn while it is running.
 
 Commit your work on the branch first (so `git diff origin/main...HEAD` shows it), then hand it to the
 **`pre-pr-reviewer`** subagent via the Agent/Task tool, passing only the issue number and the instruction to
