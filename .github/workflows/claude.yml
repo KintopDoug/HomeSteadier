@@ -27,7 +27,7 @@ jobs:
       github.event.label.name == 'claude-ready' &&
       github.event.sender.login == github.repository_owner
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: write
       pull-requests: write
@@ -43,32 +43,124 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - id: claude
+      - name: Prepare hand-off directory
+        run: mkdir -p "$RUNNER_TEMP/agent"
+
+      # The work runs as three SEPARATE agent processes, not one agent calling a subagent: in an unattended
+      # run, subagents are asynchronous and the process exits when the main agent ends its turn, so an
+      # agent that "waits for the reviewer" simply never returns (issue #44's first run did exactly that:
+      # it committed, launched the reviewer, ended its turn, and lost everything). Separate steps are also
+      # more independent: the reviewer is a fresh process that never saw the implementer's reasoning.
+
+      # ---- Stage 1: implement and commit locally. Cannot push (not in its tool list) and writes a hand-off.
+      - id: implement
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Work GitHub issue #${{ github.event.issue.number }} by following
-            .claude/skills/work-issue/SKILL.md exactly, including its eligibility checks,
-            branch naming, verification and PR rules. Never merge.
-
-            IMPORTANT: this runs unattended and your final message is DISCARDED; nobody reads it.
-            Your LAST action must be `gh issue comment ${{ github.event.issue.number }} --body-file <file>`
-            saying what happened: the PR link if you opened one, or exactly why you stopped
-            (blocked, ambiguous, a question for the maintainer, a failed command with its error).
-            Never finish silently, even if you stop early.
+            You are the IMPLEMENTER stage of an unattended, multi-stage run for GitHub issue
+            #${{ github.event.issue.number }}. Follow .claude/skills/work-issue/SKILL.md steps 1-4 ONLY
+            (eligibility, branch, implement, verify), then commit locally. Then STOP:
+            - Do NOT push, do NOT open a PR, and do NOT use any Agent/Task/subagent tool. Separate later
+              stages, each its own process, review your commit, push, and open the PR. Ending your turn
+              ends your process.
+            - Create the branch with `git switch --no-track -c wip/main/dkintop/<n>-<slug> origin/main`.
+            - Write `${{ runner.temp }}/agent/implement.md`. Its FIRST line must be exactly
+              `STATUS: committed` or `STATUS: stopped`. Then: branch name; what changed and why (2-5
+              bullets); the exact verification commands you ran and their results; what you could NOT
+              verify; risks for the reviewer.
+            - If you stop WITHOUT committing (blocked, needs-human, ambiguous, a command failed), post
+              the exact reason or question with `gh issue comment ${{ github.event.issue.number }}
+              --body-file <file>` and write `STATUS: stopped`.
+            Your final message is discarded; nobody reads it.
           claude_args: >-
-            --max-turns 60
-            --allowedTools "Edit,Write,Read,Glob,Grep,Task,Agent,Bash(git:*),Bash(gh:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*)"
-      # The action hides the transcript ("full output hidden for security") and posts nothing itself, so a
-      # run that stops early is otherwise a black box. Keep the transcript briefly for debugging.
-      # NOTE: artifacts on a public repo are readable by any signed-in GitHub user; the transcript holds
-      # only issue/repo content (GitHub masks secrets), hence the short retention.
+            --max-turns 40
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git switch:*),Bash(git checkout:*),Bash(git fetch:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr list:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*)"
+      - if: always()
+        run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-1-implement.json" 2>/dev/null || true
+      - id: gate
+        run: |
+          f="$RUNNER_TEMP/agent/implement.md"
+          commits=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+          if [ -f "$f" ] && [ "$(head -1 "$f" | tr -d '\r')" = "STATUS: committed" ] && [ "$commits" -gt 0 ]; then
+            echo "committed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "commits ahead of main: $commits; handoff present: $([ -f "$f" ] && echo yes || echo no)"
+      # Safety net: a run must never end with no PR and no explanation.
+      - name: Report if the implementer stopped without saying why
+        if: steps.gate.outputs.committed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          f="$RUNNER_TEMP/agent/implement.md"
+          if [ -f "$f" ] && [ "$(head -1 "$f" | tr -d '\r')" = "STATUS: stopped" ]; then
+            echo "Implementer stopped and already explained itself."; exit 0
+          fi
+          gh issue comment "${{ github.event.issue.number }}" --body "The agent ended without committing any work and without explaining why. See the [run]($RUN_URL) (transcript artifact kept 3 days)."
+
+      # ---- Stage 2: independent pre-PR review. Fresh process, read-only; never sees the implementer's reasoning.
+      - id: review
+        if: steps.gate.outputs.committed == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the independent PRE-PR REVIEWER for issue #${{ github.event.issue.number }}. Read
+            `.claude/agents/pre-pr-reviewer.md` and follow it exactly (ignore its frontmatter): review
+            `git diff origin/main...HEAD` against the issue. You did not write this code. Do NOT read
+            anything in `${{ runner.temp }}/agent/` and do NOT edit any repository file. Write your reply,
+            in exactly the format that file specifies, to `${{ runner.temp }}/agent/review.md`.
+            Your final message is discarded; nobody reads it.
+          claude_args: >-
+            --max-turns 25
+            --allowedTools "Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(git show:*),Bash(gh issue view:*)"
+      - if: always()
+        run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-2-review.json" 2>/dev/null || true
+
+      # ---- Stage 3: finalize. Addresses blockers, pushes the branch, opens the PR, and reports on the issue.
+      - id: publish
+        if: steps.gate.outputs.committed == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the FINALIZER stage for issue #${{ github.event.issue.number }}. Inputs:
+            `${{ runner.temp }}/agent/implement.md` (the implementer's report) and
+            `${{ runner.temp }}/agent/review.md` (the independent reviewer's verdict; it may be missing
+            or malformed if that stage failed). The work is already committed on the current branch.
+            1. If the review says CHANGES_REQUESTED, fix each blocker (or, if you disagree, write down
+               why), re-run the verification from .claude/skills/work-issue/SKILL.md step 4, and commit.
+               No second review happens in this run: say so in the PR body.
+            2. Push the current branch to a branch of the same name: `git push -u origin HEAD`. NEVER push
+               to `main`, never force-push, never merge.
+            3. Open the PR per .claude/skills/work-issue/SKILL.md step 6: title `#<n>: <summary>`,
+               `Closes #<n>`, verification details, and a "Pre-PR review" section quoting the reviewer's
+               VERDICT, issue coverage and blockers and what you did about each. Open it as a DRAFT if
+               the review is missing/malformed, any blocker is unresolved, or it touches
+               auth/migrations/infra.
+            4. Your LAST action: `gh issue comment ${{ github.event.issue.number }} --body-file <file>`
+               with the PR link, or the exact error if pushing/PR creation failed. Never finish silently.
+            Your final message is discarded; nobody reads it.
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*)"
+      - if: always()
+        run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-3-publish.json" 2>/dev/null || true
+
+      # The action hides the transcript and posts nothing itself, so keep each stage's briefly for debugging.
+      # NOTE: artifacts on a public repo are readable by any signed-in GitHub user; these hold only
+      # issue/repo content (GitHub masks secrets), hence the short retention.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: claude-work-issue-transcript
-          path: ${{ runner.temp }}/claude-execution-output.json
+          path: |
+            ${{ runner.temp }}/agent/transcript-*.json
+            ${{ runner.temp }}/agent/implement.md
+            ${{ runner.temp }}/agent/review.md
           retention-days: 3
           if-no-files-found: ignore
 
