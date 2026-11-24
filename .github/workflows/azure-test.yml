@@ -1,3 +1,5 @@
+name: deploy-azure-test
+
 # Run when commits are pushed to main (i.e. a PR is merged), unless EVERY file in the push is
 # something that cannot change the deployed application. A push that touches any other file
 # (including a mix of workflow and app files) still deploys. This is a deny-list on purpose: a new
