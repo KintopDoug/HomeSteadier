@@ -31,3 +31,8 @@ body {
   max-width: 320px;
   gap: 1rem;
 }
+
+/* Login page: bright pink background (issue #39) */
+body:has(.login-page) {
+  background-color: #ff1493;
+}
