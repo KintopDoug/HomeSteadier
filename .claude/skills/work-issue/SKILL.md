@@ -75,3 +75,8 @@ PR body: `Closes #<n>`; what changed and why (2–5 bullets); **how it was verif
 ## 7. Report
 
 Tell the user: the PR link, what was verified, and what you are unsure about. Then stop — one issue per invocation.
+
+**Unattended runs (GitHub Actions):** nobody reads your final message. Post this same report as a comment on the
+issue (`gh issue comment <n> --body-file <file>`) as your very last action — and do the same whenever you stop
+early (blocked, ambiguous, command failed, no PR opened), stating the exact reason or the exact error. A run that
+ends with no PR and no comment is a bug.

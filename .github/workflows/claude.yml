@@ -43,17 +43,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: anthropics/claude-code-action@v1
+      - id: claude
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             Work GitHub issue #${{ github.event.issue.number }} by following
             .claude/skills/work-issue/SKILL.md exactly, including its eligibility checks,
-            branch naming, verification and PR rules. Never merge. If the issue is blocked
-            or ambiguous, comment on it explaining why and stop.
+            branch naming, verification and PR rules. Never merge.
+
+            IMPORTANT: this runs unattended and your final message is DISCARDED; nobody reads it.
+            Your LAST action must be `gh issue comment ${{ github.event.issue.number }} --body-file <file>`
+            saying what happened: the PR link if you opened one, or exactly why you stopped
+            (blocked, ambiguous, a question for the maintainer, a failed command with its error).
+            Never finish silently, even if you stop early.
           claude_args: >-
             --max-turns 60
             --allowedTools "Edit,Write,Read,Glob,Grep,Task,Agent,Bash(git:*),Bash(gh:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*)"
+      # The action hides the transcript ("full output hidden for security") and posts nothing itself, so a
+      # run that stops early is otherwise a black box. Keep the transcript briefly for debugging.
+      # NOTE: artifacts on a public repo are readable by any signed-in GitHub user; the transcript holds
+      # only issue/repo content (GitHub masks secrets), hence the short retention.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: claude-work-issue-transcript
+          path: ${{ runner.temp }}/claude-execution-output.json
+          retention-days: 3
+          if-no-files-found: ignore
 
   mention:
     if: >-
