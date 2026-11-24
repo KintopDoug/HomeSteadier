@@ -3,7 +3,7 @@ import { isAxiosError } from "axios";
 import { Layout } from "../components/Layout/Layout";
 import { AuthApi } from "../api/AuthApi";
 import { session } from "../stores/SessionStore";
-import { loadFarms } from "../stores/loadFarms";
+import { loadFarms } from "../services/loadFarms";
 
 // Cached rather than re-run on every navigation — beforeLoad on the root route fires on
 // every navigation (not just the first), but the session only ever needs restoring once

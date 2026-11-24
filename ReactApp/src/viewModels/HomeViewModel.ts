@@ -2,7 +2,7 @@ import { makeAutoObservable, runInAction } from "mobx";
 import type { FarmResponse } from "../models/response/FarmResponse";
 import { getApiErrorMessage } from "../api/apiErrors";
 import { session } from "../stores/SessionStore";
-import { loadFarms } from "../stores/loadFarms";
+import { loadFarms } from "../services/loadFarms";
 
 export class HomeViewModel {
   isLoading = true;
