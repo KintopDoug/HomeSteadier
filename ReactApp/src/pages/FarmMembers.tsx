@@ -17,11 +17,14 @@ import { FarmMembersViewModel } from "../viewModels/FarmMembersViewModel";
 import { session } from "../stores/SessionStore";
 
 export const FarmMembers = observer(() => {
+  const activeFarmId = session.activeFarm?.id;
+  // Recreate the view model when the active farm changes so the list and mutations never target different farms.
   const viewModel = useMemo(() => {
     const vm = new FarmMembersViewModel();
     vm.initialize();
     return vm;
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFarmId]);
 
   if (session.activeFarm?.roleName !== "Admin") {
     return (
