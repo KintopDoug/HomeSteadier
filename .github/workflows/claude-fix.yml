@@ -33,7 +33,9 @@ jobs:
       github.event.label.name == 'claude-address-review' &&
       github.event.sender.login == github.repository_owner &&
       github.event.pull_request.state == 'open' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.login == github.repository_owner ||
+       github.event.pull_request.user.login == 'claude[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -176,6 +178,14 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # By default the action treats a PR authored by a bot (or anyone without write access) as untrusted
+          # and DENIES dotnet/npm/docker/shells for the whole session, overriding allowedTools. This job has to
+          # build and run `packages gen`, and the PRs it works on are authored by our own agent (claude[bot]),
+          # which that rule always counts as untrusted. Opting out is acceptable here because the job is
+          # started only by the repo owner (label), only for same-repo branches, and only for PRs authored by
+          # the owner or claude[bot] (see the job `if`), the same trust level as the work-issue job, which
+          # already builds and runs agent-written code. Do not widen those conditions without revisiting this.
+          restrict_untrusted_prs: "false"
           prompt: |
             You are the FIXER for pull request #${{ github.event.pull_request.number }} (branch
             `${{ github.event.pull_request.head.ref }}`), fix attempt ${{ steps.gate.outputs.attempt }} of 2.
