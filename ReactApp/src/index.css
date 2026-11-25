@@ -31,3 +31,8 @@ body {
   max-width: 320px;
   gap: 1rem;
 }
+
+.farm-members-page {
+  width: 100%;
+  min-width: 0;
+}
