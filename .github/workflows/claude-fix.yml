@@ -1,0 +1,220 @@
+# Address review feedback on a pull request, on demand.
+#
+#   A human adds the `claude-address-review` label to an open PR  ->  a fixer agent reads the review and
+#   QA feedback, fixes what it can, and pushes to the PR branch. The push re-triggers the independent
+#   post-PR review in claude.yml.
+#
+# Why label-triggered and not automatic: the review/QA comments are model-written from PR content, so
+# letting a bot comment start a write-capable agent would be a prompt-injection path on a public repo.
+# A human reading the feedback and applying the label is the gate.
+#
+# Retry limit: at most MAX_FIX_ATTEMPTS (2) fix attempts per ISSUE (or per PR when it links no issue),
+# counted from marker comments that only github-actions[bot] can author. After the 2nd attempt, if the
+# post-PR reviewer still says "changes requested" (see the review job in claude.yml), the issue and PR get
+# `needs-human`. A 3rd label is refused here and escalates immediately. Keep the "2" in sync with claude.yml.
+#
+# The fixer builds and runs PR code with the Claude token present, same trust level as claude.yml's
+# work-issue job: it is only started by the repo owner, for same-repo branches.
+name: Claude Fix
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+concurrency:
+  group: claude-fix-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    if: >-
+      github.event.label.name == 'claude-address-review' &&
+      github.event.sender.login == github.repository_owner &&
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    # Throwaway Postgres so the fixer can start the API and run `packages gen` (it regenerates
+    # ReactApp/src/api and src/models from the live OpenAPI document).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: homesteadier_admin
+          POSTGRES_PASSWORD: qa-ci-throwaway
+          POSTGRES_DB: homesteadier-db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U homesteadier_admin -d homesteadier-db"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      MAX_FIX_ATTEMPTS: "2"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare hand-off directory
+        run: mkdir -p "$RUNNER_TEMP/agent"
+
+      # ---- Gate: enforce the retry limit and record this attempt BEFORE doing any work, so a crashed or
+      # useless attempt still counts and the loop is always bounded.
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Let the label be re-applied for another attempt (labeled events only fire on add).
+          gh pr edit "$PR" --remove-label claude-address-review || true
+
+          issue=$(gh pr view "$PR" --json closingIssuesReferences --jq '.closingIssuesReferences[0].number // empty')
+          target=${issue:-$PR}
+          used=$(gh api --paginate "repos/$REPO/issues/$target/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- claude-fix-attempt -->")) | .id' | wc -l)
+          echo "issue=${issue}" >> "$GITHUB_OUTPUT"
+          echo "attempts used so far on #$target: $used of $MAX_FIX_ATTEMPTS"
+
+          if [ "$used" -ge "$MAX_FIX_ATTEMPTS" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            gh label create needs-human --color b60205 --description "Needs a human decision or review before an agent works it" 2>/dev/null || true
+            gh pr edit "$PR" --add-label needs-human
+            [ -z "$issue" ] || gh issue edit "$issue" --add-label needs-human
+            printf '%s\n' "Not starting another automatic fix: this has already had $used of $MAX_FIX_ATTEMPTS fix attempts (counted on #$target). Marked \`needs-human\`; the remaining feedback needs a person." \
+              | gh pr comment "$PR" --body-file -
+            exit 0
+          fi
+
+          attempt=$((used + 1))
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "attempt=$attempt" >> "$GITHUB_OUTPUT"
+          echo "start_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          printf '%s\n' '<!-- claude-fix-attempt -->' "Claude fix attempt **$attempt of $MAX_FIX_ATTEMPTS** for PR #$PR ([run]($RUN_URL))." \
+            | gh issue comment "$target" --body-file -
+
+      # ---- Collect feedback deterministically, from trusted authors only. PR comments on a public repo can
+      # be written by anyone; the fixer only ever sees the owner, the reviewer, and the QA reporter.
+      - name: Collect trusted review and QA feedback
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          trusted=$(jq -cn --arg o "$OWNER" '[$o, "claude[bot]", "github-actions[bot]"]')
+          f="$RUNNER_TEMP/agent/feedback.md"
+          {
+            echo "# Feedback on PR #$PR (trusted authors only: $OWNER, claude[bot], github-actions[bot])"
+            echo
+            echo "Newest is last. Earlier items may already be fixed: check them against the current code."
+            echo
+            echo "## Review verdicts and conversation comments (includes the QA report)"
+            gh api --paginate "repos/$REPO/issues/$PR/comments" | jq -r --argjson t "$trusted" \
+              '.[] | select(.user.login as $u | $t | index($u)) | "### \(.user.login), \(.created_at)\n\(.body)\n"'
+            echo
+            echo "## Inline review comments (file:line)"
+            gh api --paginate "repos/$REPO/pulls/$PR/comments" | jq -r --argjson t "$trusted" \
+              '.[] | select(.user.login as $u | $t | index($u)) | "### \(.user.login) on \(.path):\(.line // .original_line // "?"), \(.created_at)\n\(.body)\n"'
+          } | head -c 80000 > "$f"
+          echo "feedback.md: $(wc -c < "$f") bytes"
+
+      # ---- Bring up the API against the throwaway database so `packages gen` can run. Best effort: if it
+      # does not come up, the fixer is told and must say so instead of hand-editing generated files.
+      - name: Start API for code generation
+        id: api
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:5128
+          POSTGRES_PASSWORD: qa-ci-throwaway
+          JWT_SIGNING_KEY: qa-ci-throwaway-signing-key-0123456789abcdef
+        run: |
+          dotnet build Homesteadier.API -c Release --nologo -v q
+          nohup dotnet run --no-build -c Release --no-launch-profile --project Homesteadier.API > "$RUNNER_TEMP/agent/api.log" 2>&1 &
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:5128/health > /dev/null && { echo "API is up"; exit 0; }
+            sleep 2
+          done
+          echo "API never became healthy:"; tail -30 "$RUNNER_TEMP/agent/api.log"
+          exit 1
+
+      - id: fixer
+        if: steps.gate.outputs.run == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the FIXER for pull request #${{ github.event.pull_request.number }} (branch
+            `${{ github.event.pull_request.head.ref }}`), fix attempt ${{ steps.gate.outputs.attempt }} of 2.
+            The repo owner asked you to address review feedback. Follow .claude/skills/address-review/SKILL.md
+            exactly. Your input is `${{ runner.temp }}/agent/feedback.md` (already filtered to trusted authors;
+            do not fetch other PR comments). The API ${{ steps.api.outcome == 'success' && 'IS running' || 'is NOT running (it failed to start)' }}
+            at http://localhost:5128 against a throwaway Postgres, so
+            `dotnet run --project HomeSteadier.CLI -- packages gen` ${{ steps.api.outcome == 'success' && 'works' || 'will not work' }}.
+            Push only to the PR branch (`git push origin HEAD:${{ github.event.pull_request.head.ref }}`), never to
+            main, never force. Write your report to `${{ runner.temp }}/agent/fix-report.md`; a later step posts
+            it. Your final message is discarded; nobody reads it.
+          claude_args: >-
+            --max-turns 50
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*)"
+      - if: always()
+        run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-fix.json" 2>/dev/null || true
+
+      # ---- Report: posted by the workflow, not the agent, so a result is always on the PR.
+      - name: Post the result on the PR
+        if: always() && steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          START_SHA: ${{ steps.gate.outputs.start_sha }}
+          ATTEMPT: ${{ steps.gate.outputs.attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git fetch -q origin "$BRANCH" || true
+          pushed=$(git rev-list --count "$START_SHA..origin/$BRANCH" 2>/dev/null || echo 0)
+          {
+            echo "## Automatic fix attempt $ATTEMPT of $MAX_FIX_ATTEMPTS"
+            echo
+            if [ "$pushed" -gt 0 ]; then
+              echo "Pushed **$pushed commit(s)** to \`$BRANCH\`. The independent review runs again on the push."
+            else
+              echo "**No commits were pushed.**"
+            fi
+            echo
+            if [ -s "$RUNNER_TEMP/agent/fix-report.md" ]; then
+              cat "$RUNNER_TEMP/agent/fix-report.md"
+            else
+              echo "The fixer did not write a report. See the [run]($RUN_URL) (transcript artifact kept 3 days)."
+            fi
+          } | sed 's/@/@\xe2\x80\x8b/g' | head -c 60000 > "$RUNNER_TEMP/agent/comment.md"
+          gh pr comment "$PR" --body-file "$RUNNER_TEMP/agent/comment.md"
+
+      # Artifacts on a public repo are readable by any signed-in GitHub user; short retention.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: claude-fix-transcript
+          path: |
+            ${{ runner.temp }}/agent/transcript-fix.json
+            ${{ runner.temp }}/agent/feedback.md
+            ${{ runner.temp }}/agent/fix-report.md
+            ${{ runner.temp }}/agent/api.log
+          retention-days: 3
+          if-no-files-found: ignore
