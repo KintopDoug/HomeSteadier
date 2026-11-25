@@ -11,6 +11,7 @@ HomeSteadier: a .NET Aspire-orchestrated distributed app — ASP.NET Core API, R
 Issues are triaged and worked by Claude via two project skills (`.claude/skills/`) and `.github/workflows/claude.yml`:
 
 - `/triage-issues` — ranks open issues (`priority: P0`–`P3` labels), records dependencies (`blocked` label / GitHub "blocked by"), flags `needs-human`, and names the next unblocked issue.
+- The `work-issue` agent verifies against a real database: its job runs a throwaway Postgres service and the API (via `qa/stack.sh`), with `dotnet-ef` 9.x installed so it can run `database update` / `dotnet gen` / `packages gen`. If the stack fails to start it is told, and must say so in the PR instead of claiming verification.
 - `/work-issue [n]` — branches `wip/<base>/claude/<n>-<title-slug>` (e.g. `wip/main/claude/28-ui-user-avatar-disappears-on-mobile`) from `origin/<base>`, implements, runs the CI commands (`dotnet build HomeSteadier.slnx`; `npm run lint` + `npm run build` in `ReactApp/`), and opens a PR titled `#<n>: <summary>` with `Closes #<n>`.
 - Two independent reviews, by different agents with no shared context: (1) before the PR exists, the committed branch is reviewed by the read-only `pre-pr-reviewer` (`.claude/agents/`) and its blockers are fixed — locally via the subagent (max 2 rounds), but on GitHub as three separate steps (implement → review → finalize), because an unattended run exits when the main agent ends its turn, so it cannot wait on an async subagent; unresolved blockers → draft PR; (2) after the PR opens, the `review` job in `claude.yml` runs `/pr-review` and leaves inline + summary comments. Both apply `.claude/review-checklist.md`. The post-PR reviewer never builds PR code (it holds the Claude token); `ci.yml` is the trusted build. Neither can approve or merge — a human does.
 - Labelling an issue `claude-ready` runs `/work-issue` on GitHub's runners; `@claude` comments (owner only) and automatic PR review are in the same workflow.
@@ -41,6 +42,15 @@ or `run-aspire.bat` on Windows. This starts Postgres (Docker), the API, and the 
 dotnet run --project Homesteadier.API
 ```
 Swagger UI is at `/swagger` in Development. On startup, before accepting requests, the API runs `DatabaseInitializer.InitializeAsync` ([HomeSteadier.Database/DatabaseInitializer.cs](HomeSteadier.Database/DatabaseInitializer.cs)): it applies pending DbUp migrations (**fail-fast** — a bad migration aborts startup) and then seeds reference data from `HomeSteadier.Database/Seeds/*.csv` via `SeedDataService` (**warn-and-continue** — a seed failure is logged but doesn't block startup). The whole run is serialized by a session-level Postgres advisory lock so overlapping API replicas (e.g. an ACA rolling deploy) don't race — both steps are idempotent (DbUp journal; CSV `ON CONFLICT` upsert). The CLI `database update` / `database seed` commands remain for local/manual use.
+
+### Run the API against a throwaway Postgres without Aspire (what CI and the agent do)
+```bash
+docker run -d --name hs-pg -e POSTGRES_USER=homesteadier_admin -e POSTGRES_PASSWORD=qa-ci-throwaway \
+  -e POSTGRES_DB=homesteadier-db -p 5432:5432 pgvector/pgvector:pg17      # same image as AppHost.cs
+POSTGRES_PASSWORD=qa-ci-throwaway bash qa/stack.sh start-api              # applies migrations; /health on :5128
+POSTGRES_PASSWORD=qa-ci-throwaway bash qa/stack.sh signup                 # then: API_TOKEN=... bash qa/stack.sh call GET /api/Farm
+```
+`qa/stack.sh` is the single shared implementation used by `qa.yml`, `claude-fix.yml` and the `work-issue` agent (`start-api`, `restart-api`, `stop-api`, `start-web`, `signup`, `call`). It is written for Linux CI: in Git Bash `restart-api` cannot kill the old API (no `pkill`), and an inherited machine-level `POSTGRES_PASSWORD` overrides its default, so pass the password explicitly as above. `call` can only reach the local API.
 
 ### React app (ReactApp/)
 ```bash

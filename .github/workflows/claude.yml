@@ -41,6 +41,20 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
+    # A throwaway Postgres so the agent can verify against a real database (issue #60). Same image and settings
+    # as the QA and fixer jobs, and the same image local dev runs (HomeSteadier.AppHost/AppHost.cs).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: homesteadier_admin
+          POSTGRES_PASSWORD: qa-ci-throwaway
+          POSTGRES_DB: homesteadier-db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U homesteadier_admin -d homesteadier-db"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,6 +92,22 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "work branch: $name"
 
+      # ---- Database-backed verification (issue #60). Best effort: if either step fails the agent is told, and
+      # must say so instead of claiming it verified against a database.
+      # dotnet-ef 9.x, not the SDK's 10.x: it has to match the Microsoft.EntityFrameworkCore 9 packages. Needed
+      # only by `dotnet gen` (EF scaffolding from the live schema).
+      - name: Install dotnet-ef
+        continue-on-error: true
+        run: |
+          dotnet tool install --global dotnet-ef --version "9.*"
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+      - name: Start the API against the database
+        id: stack
+        continue-on-error: true
+        env:
+          STACK_LOG_DIR: ${{ runner.temp }}/agent
+        run: bash qa/stack.sh start-api
+
       # The work runs as three SEPARATE agent processes, not one agent calling a subagent: in an unattended
       # run, subagents are asynchronous and the process exits when the main agent ends its turn, so an
       # agent that "waits for the reviewer" simply never returns (issue #44's first run did exactly that:
@@ -87,6 +117,8 @@ jobs:
       # ---- Stage 1: implement and commit locally. Cannot push (not in its tool list) and writes a hand-off.
       - id: implement
         uses: anthropics/claude-code-action@v1
+        env:
+          POSTGRES_PASSWORD: qa-ci-throwaway
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -105,10 +137,21 @@ jobs:
             - If you stop WITHOUT committing (blocked, needs-human, ambiguous, a command failed), post
               the exact reason or question with `gh issue comment ${{ github.event.issue.number }}
               --body-file <file>` and write `STATUS: stopped`.
+            - DATABASE: a throwaway Postgres (the same image local dev runs) is available and the API
+              ${{ steps.stack.outcome == 'success' && 'IS running' || 'is NOT running because it failed to start; verify what you can and say plainly in implement.md that you could NOT verify against a database' }}
+              at http://localhost:5128. Use it to VERIFY, not just to build. `bash qa/stack.sh signup` prints a
+              test user and token; then `API_TOKEN=<token> bash qa/stack.sh call GET /api/Farm` (or POST/PUT/PATCH/
+              DELETE with a JSON body) exercises the live API. After changing API code run
+              `bash qa/stack.sh restart-api` before testing it. For schema or API-surface work, regenerate with
+              `dotnet run --project HomeSteadier.CLI -- database update`, then `-- dotnet gen`, then `-- packages gen`
+              (POSTGRES_PASSWORD is already set; generated files must come from these commands, never be hand-edited).
+              `packages gen` may rewrite unrelated files (e.g. route casing in AuthApi.tsx, which has drifted from the
+              generator): revert unrelated changes with git checkout and mention it. In implement.md list the exact
+              commands you ran against the database and what they returned.
             Your final message is discarded; nobody reads it.
           claude_args: >-
             --max-turns 40
-            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git switch:*),Bash(git checkout:*),Bash(git fetch:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr list:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*)"
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git switch:*),Bash(git checkout:*),Bash(git fetch:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr list:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*),Bash(bash qa/stack.sh:*)"
       - if: always()
         run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-1-implement.json" 2>/dev/null || true
       - id: gate
@@ -159,6 +202,8 @@ jobs:
       - id: publish
         if: steps.gate.outputs.committed == 'true'
         uses: anthropics/claude-code-action@v1
+        env:
+          POSTGRES_PASSWORD: qa-ci-throwaway
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -167,12 +212,15 @@ jobs:
             `${{ runner.temp }}/agent/review.md` (the independent reviewer's verdict; it may be missing
             or malformed if that stage failed). The work is already committed on the current branch.
             1. If the review says CHANGES_REQUESTED, fix each blocker (or, if you disagree, write down
-               why), re-run the verification from .claude/skills/work-issue/SKILL.md step 4, and commit.
+               why), re-run the verification from .claude/skills/work-issue/SKILL.md step 4 (including the
+               database-backed checks: `bash qa/stack.sh restart-api` first if you changed API code), and commit.
                No second review happens in this run: say so in the PR body.
             2. Push the current branch to a branch of the same name: `git push -u origin HEAD`. NEVER push
                to `main`, never force-push, never merge.
             3. Open the PR per .claude/skills/work-issue/SKILL.md step 6: title `#<n>: <summary>`,
-               `Closes #<n>`, verification details, and a "Pre-PR review" section quoting the reviewer's
+               `Closes #<n>`, verification details (name the commands run against the database, from
+               implement.md plus yours; say "not verified against a database" ONLY if the stack was down: it
+               ${{ steps.stack.outcome == 'success' && 'was up' || 'was DOWN' }} in this run), and a "Pre-PR review" section quoting the reviewer's
                VERDICT, issue coverage and blockers and what you did about each. Open it as a DRAFT if
                the review is missing/malformed, any blocker is unresolved, or it touches
                auth/migrations/infra.
@@ -181,7 +229,7 @@ jobs:
             Your final message is discarded; nobody reads it.
           claude_args: >-
             --max-turns 40
-            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*)"
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*),Bash(bash qa/stack.sh:*)"
       - if: always()
         run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-3-publish.json" 2>/dev/null || true
 
@@ -196,6 +244,7 @@ jobs:
             ${{ runner.temp }}/agent/transcript-*.json
             ${{ runner.temp }}/agent/implement.md
             ${{ runner.temp }}/agent/review.md
+            ${{ runner.temp }}/agent/api.log
           retention-days: 3
           if-no-files-found: ignore
 
