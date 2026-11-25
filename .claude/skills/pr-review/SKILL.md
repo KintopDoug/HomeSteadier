@@ -30,8 +30,9 @@ gh pr diff <n>
 
 - One inline comment per **blocker** (and per nit only if it is cheap to fix), on the exact line, using
   `mcp__github_inline_comment__create_inline_comment`. State the failing scenario and the fix.
-- Then exactly one summary comment: `gh pr comment <n> --body-file <file>` containing
-  `**Verdict:** approve / changes requested`, issue coverage (met / not met per requirement), blockers
+- Then exactly one summary comment: `gh pr comment <n> --body-file <file>` whose FIRST line is exactly `**Verdict:** approve` or `**Verdict:** changes requested` (a workflow parses it to
+  decide whether to escalate to a human after repeated fix attempts; you may add a short qualifier after it, e.g.
+  `(provisional: CI pending)`), followed by issue coverage (met / not met per requirement), blockers
   count, CI state, and anything you could not verify.
 - If a previous review comment from you is already on the PR, check whether the new commits fixed it
   and say so instead of repeating it.
