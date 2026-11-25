@@ -28,7 +28,7 @@ export class FarmMembersViewModel {
     this.errorMessage = null;
     try {
       const [members, roles] = await Promise.all([
-        FarmApi.getMembersAsync(farmId),
+        FarmApi.getMembersAsync(Number(farmId)),
         FarmRoleTypesApi.getAllAsync(),
       ]);
       runInAction(() => {
@@ -61,7 +61,7 @@ export class FarmMembersViewModel {
     this.errorMessage = null;
     this.busyUserId = member.userId;
     try {
-      await FarmApi.updateMemberRoleAsync(farmId, member.userId, { farmRoleTypeId: Number(farmRoleTypeId) });
+      await FarmApi.updateMemberRoleAsync(Number(farmId), Number(member.userId), { farmRoleTypeId: Number(farmRoleTypeId) });
       await this.initialize();
     } catch (error) {
       this.setErrorMessage(getApiErrorMessage(error, "Unable to update the member's role. Please try again."));
@@ -81,7 +81,7 @@ export class FarmMembersViewModel {
     this.errorMessage = null;
     this.busyUserId = member.userId;
     try {
-      await FarmApi.removeMemberAsync(farmId, member.userId);
+      await FarmApi.removeMemberAsync(Number(farmId), Number(member.userId));
       await this.initialize();
     } catch (error) {
       this.setErrorMessage(getApiErrorMessage(error, "Unable to remove the member. Please try again."));

@@ -16,16 +16,16 @@ class FarmApiClient {
     return response.data;
   }
 
-  async getMembersAsync(farmId: string | number): Promise<FarmMemberResponse[]> {
+  async getMembersAsync(farmId: number): Promise<FarmMemberResponse[]> {
     const response = await httpClient.get<FarmMemberResponse[]>(`/api/Farm/${farmId}/members`);
     return response.data;
   }
 
-  async removeMemberAsync(farmId: string | number, memberUserId: string | number): Promise<void> {
+  async removeMemberAsync(farmId: number, memberUserId: number): Promise<void> {
     await httpClient.delete(`/api/Farm/${farmId}/members/${memberUserId}`);
   }
 
-  async updateMemberRoleAsync(farmId: string | number, memberUserId: string | number, request: UpdateFarmMemberRoleRequest): Promise<void> {
+  async updateMemberRoleAsync(farmId: number, memberUserId: number, request: UpdateFarmMemberRoleRequest): Promise<void> {
     await httpClient.put(`/api/Farm/${farmId}/members/${memberUserId}`, request);
   }
 }

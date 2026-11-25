@@ -34,7 +34,6 @@ internal class FarmService : IFarmService
     /// invitation can confer, not a separate "owner" concept.
     /// </summary>
     private const string OwnerRoleName = "Admin";
-    private const string AdminRoleName = OwnerRoleName;
 
     private readonly IFarmRepository _farmRepository;
     private readonly IUserFarmRepository _userFarmRepository;
@@ -139,7 +138,7 @@ internal class FarmService : IFarmService
             return FarmMemberStatus.Success;
         }
 
-        if (membership.FarmRoleType.Name == AdminRoleName && newRole.Name != AdminRoleName
+        if (membership.FarmRoleType.Name == OwnerRoleName && newRole.Name != OwnerRoleName
             && await IsLastAdminAsync(farmId, membership.FarmRoleTypeId))
         {
             return FarmMemberStatus.LastAdmin;
@@ -165,7 +164,7 @@ internal class FarmService : IFarmService
             return FarmMemberStatus.MemberNotFound;
         }
 
-        if (membership.FarmRoleType.Name == AdminRoleName
+        if (membership.FarmRoleType.Name == OwnerRoleName
             && await IsLastAdminAsync(farmId, membership.FarmRoleTypeId))
         {
             return FarmMemberStatus.LastAdmin;
