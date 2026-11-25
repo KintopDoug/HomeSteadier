@@ -1,17 +1,13 @@
 using Homesteadier.API.Auth;
-using Homesteadier.Services;
-using Homesteadier.Services.Email;
-using Homesteadier.Services.Farms;
 using HomeSteadier.Models.Database;
 using HomeSteadier.Models.Request.Auth;
 using HomeSteadier.Models.Response.Auth;
 using HomeSteadier.Models.Response.Users;
-using Homesteadier.Repository.Repositories;
+using Homesteadier.Services.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Homesteadier.API.Controllers;
 
@@ -27,157 +23,75 @@ public class AuthController : ControllerBase
     private const string InvalidResetLinkMessage =
         "This password reset link is invalid or has expired. Please request a new one.";
 
-    private readonly UserManager<User> _userManager;
-    private readonly IJwtTokenService _tokenService;
-    private readonly IRefreshTokenService _refreshTokenService;
-    private readonly IRefreshTokenRepository _refreshTokenRepository;
-    private readonly IPasswordResetTokenService _passwordResetTokenService;
-    private readonly IPasswordUpdateService _passwordUpdateService;
-    private readonly ISignUpInvitationService _farmInvitationService;
-    private readonly IEmailSender _emailSender;
-    private readonly PasswordResetSettings _passwordResetSettings;
-    private readonly FrontendUrls _frontendUrls;
+    private readonly IAuthService _authService;
+    private readonly IPasswordService _passwordService;
     private readonly RefreshCookieSettings _cookieSettings;
-    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
-        UserManager<User> userManager,
-        IJwtTokenService tokenService,
-        IRefreshTokenService refreshTokenService,
-        IRefreshTokenRepository refreshTokenRepository,
-        IPasswordResetTokenService passwordResetTokenService,
-        IPasswordUpdateService passwordUpdateService,
-        ISignUpInvitationService farmInvitationService,
-        IEmailSender emailSender,
-        PasswordResetSettings passwordResetSettings,
-        FrontendUrls frontendUrls,
-        RefreshCookieSettings cookieSettings,
-        ILogger<AuthController> logger)
+        IAuthService authService,
+        IPasswordService passwordService,
+        RefreshCookieSettings cookieSettings)
     {
-        _userManager = userManager;
-        _tokenService = tokenService;
-        _refreshTokenService = refreshTokenService;
-        _refreshTokenRepository = refreshTokenRepository;
-        _passwordResetTokenService = passwordResetTokenService;
-        _passwordUpdateService = passwordUpdateService;
-        _farmInvitationService = farmInvitationService;
-        _emailSender = emailSender;
-        _passwordResetSettings = passwordResetSettings;
-        _frontendUrls = frontendUrls;
+        _authService = authService;
+        _passwordService = passwordService;
         _cookieSettings = cookieSettings;
-        _logger = logger;
     }
 
     [EnableRateLimiting(AuthRateLimiting.PolicyName)]
     [HttpPost("SignUp")]
     public async Task<ActionResult<AuthResponse>> SignUp(RegisterRequest request)
     {
-        var existing = await _userManager.FindByEmailAsync(request.Email);
-        if (existing is not null)
+        var result = await _authService.SignUpAsync(request);
+
+        return result.Status switch
         {
-            return Conflict(new { message = "A user with that email already exists." });
-        }
-
-        // Validate the invitation up front, before creating the account, so a stale/invalid link
-        // fails loudly rather than silently registering the user without joining them to a farm.
-        FarmInvitation? invitation = null;
-        if (!string.IsNullOrEmpty(request.InviteToken))
-        {
-            var inviteResult = await _farmInvitationService.ValidateForSignUpAsync(request.InviteToken, request.Email);
-
-            switch (inviteResult.Status)
-            {
-                case SignUpInvitationStatus.InvalidOrExpired:
-                    return BadRequest(new { message = "This invitation is invalid or has expired." });
-                case SignUpInvitationStatus.EmailMismatch:
-                    return BadRequest(new { message = "This invitation was issued to a different email address." });
-            }
-
-            invitation = inviteResult.Value;
-        }
-
-        var user = new User
-        {
-            Email = request.Email,
-            FirstName = request.FirstName,
-            LastName = request.LastName,
+            AuthStatus.Success => CreatedAtAction(nameof(Me), null, SignIn(result.Value)),
+            AuthStatus.EmailTaken => Conflict(new { message = "A user with that email already exists." }),
+            AuthStatus.InvalidInvitation => BadRequest(new { message = "This invitation is invalid or has expired." }),
+            AuthStatus.InvitationEmailMismatch => BadRequest(new { message = "This invitation was issued to a different email address." }),
+            AuthStatus.IdentityFailed => BadRequest(IdentityFailure("Registration failed.", result)),
+            AuthStatus.InvalidCredentials or AuthStatus.InvalidRefreshToken or AuthStatus.InvalidResetLink
+                or AuthStatus.IncorrectCurrentPassword or AuthStatus.Unauthenticated or AuthStatus.NotFound
+                => throw Unexpected(result),
         };
-
-        var result = await _userManager.CreateAsync(user, request.Password);
-        if (!result.Succeeded)
-        {
-            return BadRequest(new
-            {
-                message = "Registration failed.",
-                errors = result.Errors.Select(e => new { e.Code, e.Description }),
-            });
-        }
-
-        if (invitation is not null)
-        {
-            await _farmInvitationService.JoinAndConsumeAsync(user.Id, invitation);
-        }
-
-        var response = await IssueTokensAsync(user);
-        return CreatedAtAction(nameof(Me), null, response);
     }
 
     [EnableRateLimiting(AuthRateLimiting.PolicyName)]
     [HttpPost("Login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user is null || !user.IsActive)
-        {
-            return Unauthorized(new { message = "Invalid email or password." });
-        }
+        var result = await _authService.LoginAsync(request);
 
-        if (!await _userManager.CheckPasswordAsync(user, request.Password))
+        return result.Status switch
         {
-            return Unauthorized(new { message = "Invalid email or password." });
-        }
-
-        return Ok(await IssueTokensAsync(user));
+            AuthStatus.Success => Ok(SignIn(result.Value)),
+            AuthStatus.InvalidCredentials => Unauthorized(new { message = "Invalid email or password." }),
+            AuthStatus.EmailTaken or AuthStatus.InvalidInvitation or AuthStatus.InvitationEmailMismatch
+                or AuthStatus.IdentityFailed or AuthStatus.InvalidRefreshToken or AuthStatus.InvalidResetLink
+                or AuthStatus.IncorrectCurrentPassword or AuthStatus.Unauthenticated or AuthStatus.NotFound
+                => throw Unexpected(result),
+        };
     }
 
     [HttpPost("Refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh()
     {
-        var rawToken = RefreshTokenCookie.Read(Request, _cookieSettings);
-        var rotated = rawToken is null ? null : await _refreshTokenService.RotateAsync(rawToken);
+        var result = await _authService.RefreshAsync(RefreshTokenCookie.Read(Request, _cookieSettings));
 
-        if (rotated is null)
+        if (!result.Succeeded)
         {
+            // Every failure clears the cookie, so a client holding a dead token stops presenting it.
             RefreshTokenCookie.Clear(Response, _cookieSettings);
             return Unauthorized(new { message = "Invalid or expired refresh token." });
         }
 
-        var user = await _userManager.FindByIdAsync(rotated.Value.UserId.ToString());
-        if (user is null || !user.IsActive)
-        {
-            RefreshTokenCookie.Clear(Response, _cookieSettings);
-            return Unauthorized(new { message = "Invalid or expired refresh token." });
-        }
-
-        RefreshTokenCookie.Append(Response, rotated.Value.NewRawToken, rotated.Value.ExpiresAt, _cookieSettings);
-
-        var (accessToken, expiresAt) = _tokenService.CreateToken(user);
-        return Ok(new AuthResponse
-        {
-            Token = accessToken,
-            ExpiresAt = expiresAt,
-            User = UserResponse.FromEntity(user),
-        });
+        return Ok(SignIn(result.Value));
     }
 
     [HttpPost("Logout")]
     public async Task<IActionResult> Logout()
     {
-        var rawToken = RefreshTokenCookie.Read(Request, _cookieSettings);
-        if (rawToken is not null)
-        {
-            await _refreshTokenService.RevokeAsync(rawToken);
-        }
+        await _authService.LogoutAsync(RefreshTokenCookie.Read(Request, _cookieSettings));
 
         RefreshTokenCookie.Clear(Response, _cookieSettings);
         return NoContent();
@@ -192,32 +106,7 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
     {
-        var user = await _userManager.FindByEmailAsync(request.Email);
-
-        if (user is null || !user.IsActive)
-        {
-            // Logged, not returned. The response below is identical either way.
-            _logger.LogInformation("Password reset requested for an unknown or inactive account.");
-            return Accepted();
-        }
-
-        var (rawToken, _) = await _passwordResetTokenService.IssueAsync(user.Id);
-
-        var (subject, htmlBody, plainTextBody) = PasswordResetEmail.Compose(
-            user.FirstName,
-            _frontendUrls.PasswordResetLink(rawToken),
-            _passwordResetSettings.TokenExpiryMinutes);
-
-        try
-        {
-            await _emailSender.SendAsync(user.Email, subject, htmlBody, plainTextBody);
-        }
-        catch (Exception ex)
-        {
-            // A send failure must not change the response either — same reasoning as above.
-            _logger.LogError(ex, "Failed to send a password reset email for user {UserId}.", user.Id);
-        }
-
+        await _passwordService.RequestResetAsync(request);
         return Accepted();
     }
 
@@ -228,33 +117,18 @@ public class AuthController : ControllerBase
     [HttpPost("ResetPassword")]
     public async Task<ActionResult<AuthResponse>> ResetPassword(ResetPasswordRequest request)
     {
-        var userId = await _passwordResetTokenService.ValidateAsync(request.Token);
-        if (userId is null)
+        var result = await _passwordService.ResetAsync(request);
+
+        return result.Status switch
         {
-            return BadRequest(new { message = InvalidResetLinkMessage });
-        }
-
-        var user = await _userManager.FindByIdAsync(userId.Value.ToString());
-        if (user is null || !user.IsActive)
-        {
-            return BadRequest(new { message = InvalidResetLinkMessage });
-        }
-
-        // Note the ordering: the token is still unconsumed here, so a password the validators
-        // reject costs the user a retry rather than the whole email round-trip.
-        var result = await _passwordUpdateService.SetPasswordAsync(user, request.NewPassword);
-        if (!result.Succeeded)
-        {
-            return BadRequest(new
-            {
-                message = "Password reset failed.",
-                errors = result.Errors.Select(e => new { e.Code, e.Description }),
-            });
-        }
-
-        await _passwordResetTokenService.ConsumeAllForUserAsync(user.Id);
-
-        return Ok(await ResetSessionsAndSignInAsync(user));
+            AuthStatus.Success => Ok(SignIn(result.Value)),
+            AuthStatus.InvalidResetLink => BadRequest(new { message = InvalidResetLinkMessage }),
+            AuthStatus.IdentityFailed => BadRequest(IdentityFailure("Password reset failed.", result)),
+            AuthStatus.EmailTaken or AuthStatus.InvalidInvitation or AuthStatus.InvitationEmailMismatch
+                or AuthStatus.InvalidCredentials or AuthStatus.InvalidRefreshToken
+                or AuthStatus.IncorrectCurrentPassword or AuthStatus.Unauthenticated or AuthStatus.NotFound
+                => throw Unexpected(result),
+        };
     }
 
     /// <summary>
@@ -265,92 +139,69 @@ public class AuthController : ControllerBase
     [HttpPost("ChangePassword")]
     public async Task<ActionResult<AuthResponse>> ChangePassword(ChangePasswordRequest request)
     {
-        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        var userId = User.UserId();
         if (userId is null)
         {
             return Unauthorized();
         }
 
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user is null || !user.IsActive)
+        var result = await _passwordService.ChangeAsync(userId.Value, request);
+
+        return result.Status switch
         {
-            return Unauthorized();
-        }
-
-        // ChangePasswordAsync is safe against this UserStore (unlike ResetPasswordAsync, which
-        // needs a security-stamp store): it verifies the current password and runs the validators,
-        // and its security-stamp update is a no-op here rather than a throw.
-        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
-        if (!result.Succeeded)
-        {
-            if (result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.PasswordMismatch)))
-            {
-                return BadRequest(new { message = "Your current password is incorrect." });
-            }
-
-            return BadRequest(new
-            {
-                message = "Password change failed.",
-                errors = result.Errors.Select(e => new { e.Code, e.Description }),
-            });
-        }
-
-        // A reset link that was emailed before this deliberate change must not still work.
-        await _passwordResetTokenService.ConsumeAllForUserAsync(user.Id);
-
-        return Ok(await ResetSessionsAndSignInAsync(user));
+            AuthStatus.Success => Ok(SignIn(result.Value)),
+            AuthStatus.Unauthenticated => Unauthorized(),
+            AuthStatus.IncorrectCurrentPassword => BadRequest(new { message = "Your current password is incorrect." }),
+            AuthStatus.IdentityFailed => BadRequest(IdentityFailure("Password change failed.", result)),
+            AuthStatus.EmailTaken or AuthStatus.InvalidInvitation or AuthStatus.InvitationEmailMismatch
+                or AuthStatus.InvalidCredentials or AuthStatus.InvalidRefreshToken
+                or AuthStatus.InvalidResetLink or AuthStatus.NotFound
+                => throw Unexpected(result),
+        };
     }
 
     [Authorize]
     [HttpGet("Me")]
     public async Task<ActionResult<UserResponse>> Me()
     {
-        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        var userId = User.UserId();
         if (userId is null)
         {
             return Unauthorized();
         }
 
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user is null)
+        var result = await _authService.GetCurrentUserAsync(userId.Value);
+
+        return result.Status switch
         {
-            return NotFound();
-        }
-
-        return Ok(UserResponse.FromEntity(user));
+            AuthStatus.Success => Ok(UserResponse.FromEntity(result.Value)),
+            AuthStatus.NotFound => NotFound(),
+            AuthStatus.EmailTaken or AuthStatus.InvalidInvitation or AuthStatus.InvitationEmailMismatch
+                or AuthStatus.IdentityFailed or AuthStatus.InvalidCredentials or AuthStatus.InvalidRefreshToken
+                or AuthStatus.InvalidResetLink or AuthStatus.IncorrectCurrentPassword or AuthStatus.Unauthenticated
+                => throw Unexpected(result),
+        };
     }
 
-    /// <summary>
-    /// Logs every other device out and starts a fresh session for the caller. Used after a
-    /// password change, where the point is that sessions established with the old password stop
-    /// working — the caller keeps theirs only because it's reissued here.
-    ///
-    /// The order is load-bearing: revoking runs first, so the token issued below survives it.
-    /// (RevokeAllActiveForUserAsync issues its UPDATE immediately and bypasses the change
-    /// tracker, so it doesn't interact with the insert inside IssueTokensAsync.)
-    ///
-    /// Access tokens are not revocable — there's no security stamp in the JWT — so other devices
-    /// stay usable until their current one expires (Jwt:ExpiryMinutes, 15 by default).
-    /// </summary>
-    private async Task<AuthResponse> ResetSessionsAndSignInAsync(User user)
+    /// <summary>Hands the client its new refresh token (as the httpOnly cookie) and builds the response body.</summary>
+    private AuthResponse SignIn(AuthSession session)
     {
-        await _refreshTokenRepository.RevokeAllActiveForUserAsync(user.Id, DateTime.UtcNow);
-        return await IssueTokensAsync(user);
-    }
-
-    /// <summary>Issues an access token + a rotating refresh cookie for a freshly-authenticated user.</summary>
-    private async Task<AuthResponse> IssueTokensAsync(User user)
-    {
-        var (accessToken, expiresAt) = _tokenService.CreateToken(user);
-        var (rawRefreshToken, refreshExpiresAt) = await _refreshTokenService.IssueAsync(user.Id);
-
-        RefreshTokenCookie.Append(Response, rawRefreshToken, refreshExpiresAt, _cookieSettings);
+        RefreshTokenCookie.Append(Response, session.RefreshToken, session.RefreshTokenExpiresAt, _cookieSettings);
 
         return new AuthResponse
         {
-            Token = accessToken,
-            ExpiresAt = expiresAt,
-            User = UserResponse.FromEntity(user),
+            Token = session.AccessToken,
+            ExpiresAt = session.AccessTokenExpiresAt,
+            User = UserResponse.FromEntity(session.User),
         };
     }
+
+    private static object IdentityFailure(string message, AuthResult result) => new
+    {
+        message,
+        errors = result.Errors.Select(e => new { e.Code, e.Description }),
+    };
+
+    private static InvalidOperationException Unexpected(AuthResult result)
+        => new($"The auth service returned {result.Status}, which this action never produces.");
 }

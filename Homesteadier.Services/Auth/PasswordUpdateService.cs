@@ -1,9 +1,9 @@
 using HomeSteadier.Models.Database;
 using Microsoft.AspNetCore.Identity;
 
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services.Auth;
 
-public interface IPasswordUpdateService
+internal interface IPasswordUpdateService
 {
     /// <summary>
     /// Sets a user's password without requiring the current one (the password-reset path).
@@ -26,7 +26,7 @@ public interface IPasswordUpdateService
 ///
 /// So: validate, hash, write, save — once.
 /// </summary>
-public class PasswordUpdateService : IPasswordUpdateService
+internal class PasswordUpdateService : IPasswordUpdateService
 {
     private readonly UserManager<User> _userManager;
     private readonly IUserPasswordStore<User> _passwordStore;
