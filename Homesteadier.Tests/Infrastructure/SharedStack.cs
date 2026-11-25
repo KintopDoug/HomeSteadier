@@ -21,8 +21,7 @@ internal static class SharedStack
 
     private static async Task<ApiFactory> StartAsync()
     {
-        var container = new PostgreSqlBuilder()
-            .WithImage("pgvector/pgvector:pg17")
+        var container = new PostgreSqlBuilder("pgvector/pgvector:pg17")
             .WithDatabase("homesteadier-db")
             .WithUsername("homesteadier_admin")
             .WithPassword("tests-only-throwaway")
