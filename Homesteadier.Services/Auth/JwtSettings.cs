@@ -1,4 +1,4 @@
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services.Auth;
 
 /// <summary>
 /// JWT configuration. Issuer/Audience/ExpiryMinutes are bound from the "Jwt" config section;

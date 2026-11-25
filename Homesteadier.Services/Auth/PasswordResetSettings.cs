@@ -1,9 +1,9 @@
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services.Auth;
 
 /// <summary>
 /// Password-reset token configuration, bound from the "PasswordReset" config section.
 /// </summary>
-public class PasswordResetSettings
+internal class PasswordResetSettings
 {
     /// <summary>
     /// How long an emailed reset link stays usable. Sixty rather than fifteen minutes because

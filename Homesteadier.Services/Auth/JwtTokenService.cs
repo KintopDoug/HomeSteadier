@@ -5,14 +5,14 @@ using HomeSteadier.Models.Database;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services.Auth;
 
-public interface IJwtTokenService
+internal interface IJwtTokenService
 {
     (string Token, DateTime ExpiresAt) CreateToken(User user);
 }
 
-public class JwtTokenService : IJwtTokenService
+internal class JwtTokenService : IJwtTokenService
 {
     private readonly JwtSettings _settings;
 

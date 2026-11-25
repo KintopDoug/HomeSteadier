@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Azure.Communication.Email;
 using Homesteadier.API.Auth;
+using Homesteadier.Services.Auth;
 using Homesteadier.Services;
 using Homesteadier.Services.Email;
 using Homesteadier.API.Middleware;
@@ -112,8 +113,6 @@ builder.Services.AddIdentityCore<User>(options =>
 
 // JWT bearer authentication
 var jwtSettings = BuildJwtSettings(builder.Configuration);
-builder.Services.AddSingleton(jwtSettings);
-builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -168,27 +167,22 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// Refresh-token service + cookie configuration
-builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
-
+// Refresh-cookie configuration (the cookie itself is an HTTP concern, so it stays in the API)
 var cookieSettings = new RefreshCookieSettings();
 builder.Configuration.GetSection("RefreshCookie").Bind(cookieSettings);
 builder.Services.AddSingleton(cookieSettings);
 
-// Password reset: token lifetime, the password-replacement service, and the SPA origin that
-// emailed reset links point at.
-var passwordResetSettings = new PasswordResetSettings();
-builder.Configuration.GetSection("PasswordReset").Bind(passwordResetSettings);
-builder.Services.AddSingleton(passwordResetSettings);
-
-builder.Services.AddScoped<IPasswordResetTokenService, PasswordResetTokenService>();
-builder.Services.AddScoped<IPasswordUpdateService, PasswordUpdateService>();
+// The SPA origin that emailed links (password reset, invitations) point at.
 builder.Services.AddSingleton(new FrontendUrls(ResolveFrontendBaseUrl(builder.Configuration)));
 
 // Farm services (farms, invitations, role types) plus the invitation token service and settings
 // behind them. Those are internal to Homesteadier.Services, so this call is the whole wiring
 // surface — IFarmService / IFarmInvitationService / IFarmRoleTypeService are the only ways in.
 builder.Services.AddFarmServices(builder.Configuration);
+
+// Auth services: IAuthService / IPasswordService, with the token, session and password-reset machinery
+// internal to Homesteadier.Services. JwtSettings is shared because bearer validation above needs it too.
+builder.Services.AddAuthServices(builder.Configuration, jwtSettings);
 
 // Outbound email. The ACS connection string carries an access key, so it comes from the
 // environment like JWT_SIGNING_KEY rather than appsettings.shared.json; AppHost injects it into

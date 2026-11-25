@@ -1,10 +1,9 @@
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository.Repositories;
-using Homesteadier.Services;
 
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services.Auth;
 
-public interface IPasswordResetTokenService
+internal interface IPasswordResetTokenService
 {
     /// <summary>
     /// Issues a reset token for the user, first consuming any outstanding ones so only the newest
@@ -34,7 +33,7 @@ public interface IPasswordResetTokenService
 /// burned their only link and has to start the whole email round-trip again. So the controller
 /// validates, sets the password, and only then consumes.
 /// </summary>
-public class PasswordResetTokenService : IPasswordResetTokenService
+internal class PasswordResetTokenService : IPasswordResetTokenService
 {
     private readonly IPasswordResetTokenRepository _repository;
     private readonly PasswordResetSettings _settings;

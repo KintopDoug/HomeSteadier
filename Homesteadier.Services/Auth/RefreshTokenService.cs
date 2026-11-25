@@ -1,10 +1,9 @@
 using HomeSteadier.Models.Database;
 using Homesteadier.Repository.Repositories;
-using Homesteadier.Services;
 
-namespace Homesteadier.API.Auth;
+namespace Homesteadier.Services.Auth;
 
-public interface IRefreshTokenService
+internal interface IRefreshTokenService
 {
     /// <summary>Issues a new refresh token for the user and returns the raw value (to put in the cookie).</summary>
     Task<(string RawToken, DateTime ExpiresAt)> IssueAsync(int userId);
@@ -20,7 +19,7 @@ public interface IRefreshTokenService
     Task RevokeAsync(string rawToken);
 }
 
-public class RefreshTokenService : IRefreshTokenService
+internal class RefreshTokenService : IRefreshTokenService
 {
     private readonly IRefreshTokenRepository _repository;
     private readonly JwtSettings _settings;
