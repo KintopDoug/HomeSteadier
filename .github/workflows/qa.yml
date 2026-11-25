@@ -149,37 +149,20 @@ jobs:
           # Lockfile is Windows-generated; fall back to install if npm ci rejects it (see CLAUDE.md on ReactApp).
           npm ci --no-audit --no-fund || npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
+      # One shared implementation (qa/stack.sh), taken from the DEFAULT branch like the rest of the harness; it
+      # builds and starts the PR's code at app/. Logs and failure notes land where the evidence step expects them.
       - name: Build and start API
         env:
-          ASPNETCORE_ENVIRONMENT: Development
-          ASPNETCORE_URLS: http://localhost:5128
-          POSTGRES_PASSWORD: qa-ci-throwaway
-          # Throwaway key for an ephemeral stack; not a repository secret.
-          JWT_SIGNING_KEY: qa-ci-throwaway-signing-key-0123456789abcdef
-          # Plain-http localhost cannot carry a Secure/SameSite=None cookie in every browser build.
-          RefreshCookie__SameSite: Lax
-          RefreshCookie__Secure: "false"
-        run: |
-          dotnet build app/Homesteadier.API -c Release --nologo -v q
-          nohup dotnet run --no-build -c Release --no-launch-profile --project app/Homesteadier.API > api.log 2>&1 &
-          for i in $(seq 1 90); do
-            curl -sf http://localhost:5128/health > /dev/null && exit 0
-            sleep 2
-          done
-          { echo "API never became healthy (migrations/startup). Last log lines:"; tail -40 api.log; } | tee -a notes.txt
-          exit 1
+          STACK_ROOT: app
+          STACK_LOG_DIR: ${{ github.workspace }}
+          STACK_NOTES_FILE: ${{ github.workspace }}/notes.txt
+        run: bash harness/qa/stack.sh start-api
       - name: Start web
         env:
-          VITE_API_URL: http://localhost:5128
-        run: |
-          npm --prefix app/ReactApp install --no-audit --no-fund
-          nohup npm --prefix app/ReactApp run dev -- --port 5173 --strictPort > web.log 2>&1 &
-          for i in $(seq 1 60); do
-            curl -sf http://localhost:5173/ > /dev/null && exit 0
-            sleep 2
-          done
-          { echo "Web never came up. Last log lines:"; tail -40 web.log; } | tee -a notes.txt
-          exit 1
+          STACK_ROOT: app
+          STACK_LOG_DIR: ${{ github.workspace }}
+          STACK_NOTES_FILE: ${{ github.workspace }}/notes.txt
+        run: bash harness/qa/stack.sh start-web
       - name: Run the QA spec
         working-directory: harness/qa
         env:

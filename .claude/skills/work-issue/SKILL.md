@@ -45,7 +45,31 @@ dotnet build HomeSteadier.slnx
 cd ReactApp && npm install && npm run lint && npm run build
 ```
 
-Fix failures you caused. If a failure pre-exists on `main`, say so in the PR rather than hiding it. If a change is observable in the app, run it (Aspire or the dev server) and check it; if you could not, say that explicitly. Do not claim something works that you did not run.
+Fix failures you caused. If a failure pre-exists on `main`, say so in the PR rather than hiding it. If a change is observable in the app, run it and check it; if you could not, say that explicitly. Do not claim something works that you did not run.
+
+### Against the database
+
+A compile is not verification of anything that touches the API or the database. Run it for real. In unattended
+GitHub runs a throwaway Postgres (the same `pgvector/pgvector:pg17` local dev uses) and the API are already up and your
+prompt says so; elsewhere, start Postgres with those settings (`POSTGRES_USER=homesteadier_admin`,
+`POSTGRES_DB=homesteadier-db`, `POSTGRES_PASSWORD=qa-ci-throwaway`, port 5432) and then:
+
+```bash
+bash qa/stack.sh start-api                 # builds + starts the API; it applies the DbUp migrations itself
+bash qa/stack.sh signup                    # prints a fresh test user and token
+API_TOKEN=<token> bash qa/stack.sh call GET /api/Farm
+API_TOKEN=<token> bash qa/stack.sh call POST /api/Farm '{"name":"x","latitude":1,"longitude":2}'
+bash qa/stack.sh restart-api               # after changing API code, before testing it again
+```
+
+Exercise each endpoint you added or changed, the success path **and** the denial path (no token -> 401, wrong role -> 403).
+For schema or API-surface changes use the CLI against that database: `dotnet run --project HomeSteadier.CLI -- database update`,
+then `-- dotnet gen`, then `-- packages gen` (set `POSTGRES_PASSWORD` to the same value; `dotnet gen` needs `dotnet-ef` 9.x).
+`packages gen` currently rewrites `ReactApp/src/api/AuthApi.tsx` (route casing drift, unrelated to your change): revert
+unrelated generator changes with `git checkout -- <file>` and mention it. `bash qa/stack.sh call` can only reach the local API.
+
+In the PR body's **Verification** section, name the commands you ran against the database and what they returned. Write "not
+verified against a database" only if the stack was genuinely unavailable, and say why.
 
 ## 5. Independent review (before any PR exists)
 

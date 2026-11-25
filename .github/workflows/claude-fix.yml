@@ -96,6 +96,8 @@ jobs:
           git show "origin/$DEFAULT_BRANCH:.claude/skills/address-review/SKILL.md" > "$t/address-review.md"
           git show "origin/$DEFAULT_BRANCH:.claude/review-checklist.md" > "$t/review-checklist.md"
           git show "origin/$DEFAULT_BRANCH:CLAUDE.md" > "$t/CLAUDE.md"
+          # The stack helper too: run the default branch's copy, not whatever the PR branch has.
+          git show "origin/$DEFAULT_BRANCH:qa/stack.sh" > "$t/stack.sh"
           ls -l "$t"
 
       # ---- Gate: enforce the retry limit and record this attempt BEFORE doing any work, so a crashed or
@@ -166,19 +168,8 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         continue-on-error: true
         env:
-          ASPNETCORE_ENVIRONMENT: Development
-          ASPNETCORE_URLS: http://localhost:5128
-          POSTGRES_PASSWORD: qa-ci-throwaway
-          JWT_SIGNING_KEY: qa-ci-throwaway-signing-key-0123456789abcdef
-        run: |
-          dotnet build Homesteadier.API -c Release --nologo -v q
-          nohup dotnet run --no-build -c Release --no-launch-profile --project Homesteadier.API > "$RUNNER_TEMP/agent/api.log" 2>&1 &
-          for i in $(seq 1 90); do
-            curl -sf http://localhost:5128/health > /dev/null && { echo "API is up"; exit 0; }
-            sleep 2
-          done
-          echo "API never became healthy:"; tail -30 "$RUNNER_TEMP/agent/api.log"
-          exit 1
+          STACK_LOG_DIR: ${{ runner.temp }}/agent
+        run: bash "$RUNNER_TEMP/agent/trusted/stack.sh" start-api
 
       - id: fixer
         if: steps.gate.outputs.run == 'true'
@@ -206,12 +197,16 @@ jobs:
             do not fetch other PR comments). The API ${{ steps.api.outcome == 'success' && 'IS running' || 'is NOT running (it failed to start)' }}
             at http://localhost:5128 against a throwaway Postgres, so
             `dotnet run --project HomeSteadier.CLI -- packages gen` ${{ steps.api.outcome == 'success' && 'works' || 'will not work' }}.
+            If you change API code, run `bash ${{ runner.temp }}/agent/trusted/stack.sh restart-api` before
+            regenerating or testing it (`signup` and `call GET /api/...` on that script exercise the live API).
+            `packages gen` may also rewrite files unrelated to your fix (e.g. route casing in AuthApi.tsx, which has
+            drifted from the generator); revert unrelated changes with git checkout and say so in the report.
             Push only to the PR branch (`git push origin HEAD:${{ github.event.pull_request.head.ref }}`), never to
             main, never force. Write your report to `${{ runner.temp }}/agent/fix-report.md`; a later step posts
             it. Your final message is discarded; nobody reads it.
           claude_args: >-
             --max-turns 50
-            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*)"
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(dotnet:*),Bash(npm:*),Bash(npx:*),Bash(cd:*),Bash(mkdir:*),Bash(bash ${{ runner.temp }}/agent/trusted/stack.sh:*)"
       - if: always()
         run: cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/agent/transcript-fix.json" 2>/dev/null || true
 
