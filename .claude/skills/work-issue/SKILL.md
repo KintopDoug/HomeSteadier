@@ -56,17 +56,19 @@ prompt says so; elsewhere, start Postgres with those settings (`POSTGRES_USER=ho
 
 ```bash
 bash qa/stack.sh start-api                 # builds + starts the API; it applies the DbUp migrations itself
-bash qa/stack.sh signup                    # prints a fresh test user and token
-API_TOKEN=<token> bash qa/stack.sh call GET /api/Farm
-API_TOKEN=<token> bash qa/stack.sh call POST /api/Farm '{"name":"x","latitude":1,"longitude":2}'
+bash qa/stack.sh signup                    # creates a fresh test user and saves its token
+bash qa/stack.sh call GET /api/Farm
+bash qa/stack.sh call POST /api/Farm '{"name":"x","latitude":1,"longitude":2}'
+bash qa/stack.sh call --token <jwt> GET /api/Farm     # as a different user (a second signup's token), e.g. for a 403
 bash qa/stack.sh restart-api               # after changing API code, before testing it again
 ```
 
+Do not prefix these with `VAR=value`: the agent allowlist matches commands that start with `bash qa/stack.sh`.
 Exercise each endpoint you added or changed, the success path **and** the denial path (no token -> 401, wrong role -> 403).
-For schema or API-surface changes use the CLI against that database: `dotnet run --project HomeSteadier.CLI -- database update`,
-then `-- dotnet gen`, then `-- packages gen` (set `POSTGRES_PASSWORD` to the same value; `dotnet gen` needs `dotnet-ef` 9.x).
-`packages gen` currently rewrites `ReactApp/src/api/AuthApi.tsx` (route casing drift, unrelated to your change): revert
-unrelated generator changes with `git checkout -- <file>` and mention it. `bash qa/stack.sh call` can only reach the local API.
+For schema or API-surface changes run the CLI against that database: `bash qa/stack.sh cli database update`, then
+`cli dotnet gen`, then `cli packages gen` (`dotnet gen` needs `dotnet-ef` 9.x). Generator output can include changes
+unrelated to yours (at the time of writing, the committed `AuthApi.tsx` differs from the generator in route casing):
+revert unrelated generator changes with `git checkout -- <file>` and mention it. `bash qa/stack.sh call` only talks to a local API.
 
 In the PR body's **Verification** section, name the commands you ran against the database and what they returned. Write "not
 verified against a database" only if the stack was genuinely unavailable, and say why.
