@@ -139,15 +139,16 @@ jobs:
               --body-file <file>` and write `STATUS: stopped`.
             - DATABASE: a throwaway Postgres (the same image local dev runs) is available and the API
               ${{ steps.stack.outcome == 'success' && 'IS running' || 'is NOT running because it failed to start; verify what you can and say plainly in implement.md that you could NOT verify against a database' }}
-              at http://localhost:5128. Use it to VERIFY, not just to build. `bash qa/stack.sh signup` prints a
-              test user and token; then `API_TOKEN=<token> bash qa/stack.sh call GET /api/Farm` (or POST/PUT/PATCH/
-              DELETE with a JSON body) exercises the live API. After changing API code run
-              `bash qa/stack.sh restart-api` before testing it. For schema or API-surface work, regenerate with
-              `dotnet run --project HomeSteadier.CLI -- database update`, then `-- dotnet gen`, then `-- packages gen`
-              (POSTGRES_PASSWORD is already set; generated files must come from these commands, never be hand-edited).
-              `packages gen` may rewrite unrelated files (e.g. route casing in AuthApi.tsx, which has drifted from the
-              generator): revert unrelated changes with git checkout and mention it. In implement.md list the exact
-              commands you ran against the database and what they returned.
+              at http://localhost:5128. Use it to VERIFY, not just to build. `bash qa/stack.sh signup` creates a
+              test user and saves its token; then `bash qa/stack.sh call GET /api/Farm` (or POST/PUT/PATCH/DELETE
+              with a JSON body) calls the live API as that user, and `call --token <jwt> ...` as another user (e.g. to
+              prove a 403). Never put VAR=value in front of these commands: the allowlist matches commands that start
+              with `bash qa/stack.sh`. After changing API code run `bash qa/stack.sh restart-api` before testing it.
+              For schema or API-surface work regenerate with `bash qa/stack.sh cli database update`, then
+              `bash qa/stack.sh cli dotnet gen`, then `bash qa/stack.sh cli packages gen` (generated files must come from
+              these commands, never be hand-edited). Generator output can include changes unrelated to your work (for
+              example, the committed AuthApi.tsx may differ in route casing): revert unrelated changes with git checkout
+              and mention it. In implement.md list the exact commands you ran against the database and what they returned.
             Your final message is discarded; nobody reads it.
           claude_args: >-
             --max-turns 40
