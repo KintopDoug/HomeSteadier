@@ -44,6 +44,20 @@ public enum CreateFarmStatus
     OwnerRoleMissing,
 }
 
+public enum FarmMemberStatus
+{
+    Success,
+
+    /// <summary>The caller isn't an admin of the farm (or isn't a member at all).</summary>
+    NotFarmAdmin,
+
+    MemberNotFound,
+    InvalidRole,
+
+    /// <summary>The change would leave the farm with no admin, so nobody could manage it.</summary>
+    LastAdmin,
+}
+
 public enum CreateFarmInvitationStatus
 {
     Success,

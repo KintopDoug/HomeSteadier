@@ -12,6 +12,15 @@ public interface IFarmService
 
     /// <summary>Creates a farm and makes the creator its admin. Returns the new membership.</summary>
     Task<FarmResult<CreateFarmStatus, UserFarm>> CreateAsync(int userId, CreateFarmRequest request);
+
+    /// <summary>Lists a farm's members. Admin only.</summary>
+    Task<FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>> GetMembersAsync(int callerId, int farmId);
+
+    /// <summary>Changes a member's role. Admin only; the last admin can't be demoted.</summary>
+    Task<FarmMemberStatus> UpdateMemberRoleAsync(int callerId, int farmId, int memberUserId, int farmRoleTypeId);
+
+    /// <summary>Removes a member from the farm. Admin only; the last admin can't be removed.</summary>
+    Task<FarmMemberStatus> RemoveMemberAsync(int callerId, int farmId, int memberUserId);
 }
 
 /// <summary>
@@ -45,6 +54,86 @@ internal class FarmService : IFarmService
 
     public async Task<IReadOnlyList<UserFarm>> GetForUserAsync(int userId)
         => await _userFarmRepository.GetByUserIdAsync(userId);
+
+    public async Task<FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>> GetMembersAsync(int callerId, int farmId)
+    {
+        if (!await IsAdminAsync(callerId, farmId))
+        {
+            return FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>.Failed(FarmMemberStatus.NotFarmAdmin);
+        }
+
+        var members = await _userFarmRepository.GetByFarmIdAsync(farmId);
+        return FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>.Succeeded(FarmMemberStatus.Success, members);
+    }
+
+    public async Task<FarmMemberStatus> UpdateMemberRoleAsync(
+        int callerId, int farmId, int memberUserId, int farmRoleTypeId)
+    {
+        if (!await IsAdminAsync(callerId, farmId))
+        {
+            return FarmMemberStatus.NotFarmAdmin;
+        }
+
+        var membership = await _userFarmRepository.GetTrackedByUserAndFarmAsync(memberUserId, farmId);
+        if (membership is null)
+        {
+            return FarmMemberStatus.MemberNotFound;
+        }
+
+        var role = await _farmRoleTypeRepository.GetByIdAsync(farmRoleTypeId);
+        if (role is null)
+        {
+            return FarmMemberStatus.InvalidRole;
+        }
+
+        if (membership.FarmRoleTypeId == role.Id)
+        {
+            return FarmMemberStatus.Success;
+        }
+
+        if (membership.FarmRoleType.Name == OwnerRoleName && await IsLastAdminAsync(farmId, membership))
+        {
+            return FarmMemberStatus.LastAdmin;
+        }
+
+        membership.FarmRoleTypeId = role.Id;
+        membership.FarmRoleType = role;
+        await _userFarmRepository.UpdateAsync(membership);
+        await _userFarmRepository.SaveChangesAsync();
+        return FarmMemberStatus.Success;
+    }
+
+    public async Task<FarmMemberStatus> RemoveMemberAsync(int callerId, int farmId, int memberUserId)
+    {
+        if (!await IsAdminAsync(callerId, farmId))
+        {
+            return FarmMemberStatus.NotFarmAdmin;
+        }
+
+        var membership = await _userFarmRepository.GetTrackedByUserAndFarmAsync(memberUserId, farmId);
+        if (membership is null)
+        {
+            return FarmMemberStatus.MemberNotFound;
+        }
+
+        if (membership.FarmRoleType.Name == OwnerRoleName && await IsLastAdminAsync(farmId, membership))
+        {
+            return FarmMemberStatus.LastAdmin;
+        }
+
+        await _userFarmRepository.DeleteAsync(membership);
+        await _userFarmRepository.SaveChangesAsync();
+        return FarmMemberStatus.Success;
+    }
+
+    private async Task<bool> IsAdminAsync(int userId, int farmId)
+    {
+        var membership = await _userFarmRepository.GetByUserAndFarmAsync(userId, farmId);
+        return membership is not null && membership.FarmRoleType.Name == OwnerRoleName;
+    }
+
+    private async Task<bool> IsLastAdminAsync(int farmId, UserFarm adminMembership)
+        => await _userFarmRepository.CountByFarmAndRoleAsync(farmId, adminMembership.FarmRoleTypeId) <= 1;
 
     public async Task<FarmResult<CreateFarmStatus, UserFarm>> CreateAsync(int userId, CreateFarmRequest request)
     {
