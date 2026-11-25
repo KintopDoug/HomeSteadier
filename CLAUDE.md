@@ -12,6 +12,7 @@ Issues are triaged and worked by Claude via two project skills (`.claude/skills/
 
 - `/triage-issues` — ranks open issues (`priority: P0`–`P3` labels), records dependencies (`blocked` label / GitHub "blocked by"), flags `needs-human`, and names the next unblocked issue.
 - `/work-issue [n]` — branches `wip/<base>/claude/<n>-<title-slug>` (e.g. `wip/main/claude/28-ui-user-avatar-disappears-on-mobile`) from `origin/<base>`, implements, runs the CI commands (`dotnet build HomeSteadier.slnx`; `npm run lint` + `npm run build` in `ReactApp/`), and opens a PR titled `#<n>: <summary>` with `Closes #<n>`.
+- Behaviour changes ship with tests: `Homesteadier.Tests` runs in `ci.yml` on every PR, and the review checklist treats a missing test for auth/authorization/data changes as a blocker.
 - The `work-issue` agent verifies against a real database: its job runs a throwaway Postgres service and the API (via `qa/stack.sh`), with `dotnet-ef` 9.x installed so it can run `database update` / `dotnet gen` / `packages gen`. If the stack fails to start it is told, and must say so in the PR instead of claiming verification.
 - Two independent reviews, by different agents with no shared context: (1) before the PR exists, the committed branch is reviewed by the read-only `pre-pr-reviewer` (`.claude/agents/`) and its blockers are fixed — locally via the subagent (max 2 rounds), but on GitHub as three separate steps (implement → review → finalize), because an unattended run exits when the main agent ends its turn, so it cannot wait on an async subagent; unresolved blockers → draft PR; (2) after the PR opens, the `review` job in `claude.yml` runs `/pr-review` and leaves inline + summary comments. Both apply `.claude/review-checklist.md`. The post-PR reviewer never builds PR code (it holds the Claude token); `ci.yml` is the trusted build. Neither can approve or merge — a human does.
 - Labelling an issue `claude-ready` runs `/work-issue` on GitHub's runners; `@claude` comments (owner only) and automatic PR review are in the same workflow.
@@ -52,6 +53,14 @@ POSTGRES_PASSWORD=qa-ci-throwaway bash qa/stack.sh signup                 # save
 POSTGRES_PASSWORD=qa-ci-throwaway bash qa/stack.sh cli database update    # also: cli dotnet gen, cli packages gen
 ```
 `qa/stack.sh` is the single shared implementation used by `qa.yml`, `claude-fix.yml` and the `work-issue` agent (`start-api`, `restart-api`, `stop-api`, `start-web`, `signup`, `call`). It is written for Linux CI: in Git Bash `restart-api` cannot kill the old API (no `pkill`), and an inherited machine-level `POSTGRES_PASSWORD` overrides its default, so pass the password explicitly as above. `call` refuses any API URL that is not localhost. None of its commands needs a `VAR=value` prefix (the agent's allowlist matches commands that start with `bash qa/stack.sh`).
+
+### Tests (Homesteadier.Tests)
+```bash
+dotnet test HomeSteadier.slnx
+```
+Integration tests: the **real API** hosted in-process (`WebApplicationFactory<Program>`) against a **real Postgres** that Testcontainers starts (`pgvector/pgvector:pg17`, the image `AppHost.cs` uses). Nothing about the database is mocked: the API runs its normal startup, applies the DbUp migrations and seeds reference data itself. **Docker must be running.** On an older Docker engine, if the error says the client API version is "too new", set `DOCKER_API_VERSION` to the server's API version from `docker version` (for example `1.41`). CI runs the same command in `ci.yml`, and a failing test fails the PR.
+
+Conventions: each test makes its own users/farms with unique values and its own `X-Forwarded-For` (the auth rate limiter is real and partitions by IP), so tests run in any order and in parallel across classes; outgoing email is captured (`CapturingEmailSender`), never sent; assert the status **and** the outcome, and cover the denial path (401/403) as well as success. **New or changed API, auth, authorization or data behaviour needs a test**; a pure refactor, docs or config change does not.
 
 ### React app (ReactApp/)
 ```bash

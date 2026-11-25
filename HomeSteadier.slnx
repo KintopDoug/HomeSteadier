@@ -10,4 +10,5 @@
   <Project Path="Homesteadier.Repository/Homesteadier.Repository.csproj" />
   <Project Path="Homesteadier.Services/Homesteadier.Services.csproj" />
   <Project Path="HomeSteadier.ServiceDefaults/HomeSteadier.ServiceDefaults.csproj" />
+  <Project Path="Homesteadier.Tests/Homesteadier.Tests.csproj" />
 </Solution>

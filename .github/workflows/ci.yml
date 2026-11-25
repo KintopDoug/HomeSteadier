@@ -18,12 +18,27 @@ concurrency:
 jobs:
   dotnet:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.x
       - run: dotnet build HomeSteadier.slnx --configuration Release
+      # Integration tests (Homesteadier.Tests): the real API against a real Postgres. Testcontainers starts
+      # pgvector/pgvector:pg17 (the image local dev uses) on the runner's Docker; no service container is needed.
+      # A failing test fails this job, which is the check on the PR.
+      - name: Test
+        run: >-
+          dotnet test HomeSteadier.slnx --configuration Release --no-build --nologo
+          --logger "trx;LogFileName=test-results.trx" --results-directory TestResults
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: dotnet-test-results
+          path: TestResults
+          retention-days: 3
+          if-no-files-found: ignore
 
   react:
     runs-on: ubuntu-latest

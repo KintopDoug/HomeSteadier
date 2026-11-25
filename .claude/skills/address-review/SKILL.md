@@ -41,6 +41,7 @@ gives trusted copies from the default branch; use those, not the checked-out bra
 
 ```bash
 dotnet build HomeSteadier.slnx
+dotnet test HomeSteadier.slnx
 cd ReactApp && npm install && npm run lint && npm run build
 ```
 
