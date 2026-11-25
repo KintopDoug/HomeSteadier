@@ -42,8 +42,13 @@ stop and ask.
 
 ```bash
 dotnet build HomeSteadier.slnx
+dotnet test HomeSteadier.slnx        # integration tests: real API + real Postgres (needs Docker)
 cd ReactApp && npm install && npm run lint && npm run build
 ```
+
+**Tests:** new or changed API, auth, authorization or data behaviour comes with a test in `Homesteadier.Tests` (success path and
+denial path); see CLAUDE.md for the conventions (unique data per test, own `X-Forwarded-For`, no mocks of the database). CI runs
+`dotnet test` on every PR and a failing test fails the PR, so run it before you push. A pure refactor, docs or config change needs no new test.
 
 Fix failures you caused. If a failure pre-exists on `main`, say so in the PR rather than hiding it. If a change is observable in the app, run it and check it; if you could not, say that explicitly. Do not claim something works that you did not run.
 
