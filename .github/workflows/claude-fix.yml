@@ -8,6 +8,7 @@
 # letting a bot comment start a write-capable agent would be a prompt-injection path on a public repo.
 # A human reading the feedback and applying the label is the gate.
 #
+# Two entry points: the label above (manual), and claude.yml's automatic loop (workflow_call).
 # Retry limit: at most MAX_FIX_ATTEMPTS (2) fix attempts per ISSUE (or per PR when it links no issue),
 # counted from marker comments that only github-actions[bot] can author. After the 2nd attempt, if the
 # post-PR reviewer still says "changes requested" (see the review job in claude.yml), the issue and PR get
@@ -20,6 +21,9 @@ name: Claude Fix
 on:
   pull_request:
     types: [labeled]
+  # Called by claude.yml's `fix` job when review/QA fail (the automatic loop). The caller's pull_request event is
+  # the event here, so github.event.pull_request.* is available exactly as for a label.
+  workflow_call:
 
 permissions: {}
 
@@ -29,9 +33,12 @@ concurrency:
 
 jobs:
   fix:
+    # Label path: only the owner's `claude-address-review` label. Called path (action is opened/synchronize/...):
+    # claude.yml has already decided; the checks below still apply.
     if: >-
-      github.event.label.name == 'claude-address-review' &&
-      github.event.sender.login == github.repository_owner &&
+      (github.event.action != 'labeled' ||
+       (github.event.label.name == 'claude-address-review' &&
+        github.event.sender.login == github.repository_owner)) &&
       github.event.pull_request.state == 'open' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.pull_request.user.login == github.repository_owner ||
@@ -186,6 +193,9 @@ jobs:
           # the owner or claude[bot] (see the job `if`), the same trust level as the work-issue job, which
           # already builds and runs agent-written code. Do not widen those conditions without revisiting this.
           restrict_untrusted_prs: "false"
+          # In the automatic loop the actor is whoever pushed last, usually claude[bot]; the action rejects bot
+          # actors unless allowed. Only our own agent is allowed (same as the review and QA jobs).
+          allowed_bots: "claude"
           prompt: |
             You are the FIXER for pull request #${{ github.event.pull_request.number }} (branch
             `${{ github.event.pull_request.head.ref }}`), fix attempt ${{ steps.gate.outputs.attempt }} of 2.

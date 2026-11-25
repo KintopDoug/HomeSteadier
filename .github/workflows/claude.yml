@@ -20,6 +20,14 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review]
 
+# One round at a time per PR: review -> QA -> decide -> fix -> push -> the next round. Without this, two
+# overlapping rounds could both decide to fix and spend the whole retry budget at once. cancel-in-progress is
+# off, so a queued round waits instead of killing the one that is mid-fix. Keyed by event name so the many
+# (skipped) bot-comment runs on a PR cannot replace a queued pull_request run.
+concurrency:
+  group: claude-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   work-issue:
     if: >-
@@ -232,7 +240,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      issues: write
+      issues: read
       actions: read
       id-token: write
     steps:
@@ -242,8 +250,6 @@ jobs:
       # Deliberately NO dotnet/node setup and no build commands: this job holds the Claude token,
       # and building a PR runs its code (npm scripts, MSBuild targets). ci.yml builds PRs without
       # secrets; the reviewer reads that result instead of re-running it.
-      - id: since
-        run: echo "t=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -257,49 +263,44 @@ jobs:
           claude_args: >-
             --max-turns 25
             --allowedTools "Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)"
-      # Retry limit for the label-triggered fixer (claude-fix.yml). After MAX_FIX_ATTEMPTS fix attempts on
-      # this issue, if THIS review still says "changes requested", stop the loop: label the issue (and PR)
-      # needs-human. Reads the verdict line the pr-review skill writes; ignores comments older than this run.
-      - name: Escalate to a human after repeated fix attempts
-        if: success()
+
+  # How many automatic fix attempts this issue has used so far, counted from marker comments that only
+  # github-actions[bot] can author (so a stranger cannot spend or reset the budget). Lets QA re-run after a
+  # fix push without re-running on every unrelated push.
+  ctx:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      attempts: ${{ steps.count.outputs.attempts }}
+    steps:
+      - id: count
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-          SINCE: ${{ steps.since.outputs.t }}
-          MAX_FIX_ATTEMPTS: "2" # keep in sync with claude-fix.yml
         run: |
           set -euo pipefail
-          verdict=$(gh api --paginate "repos/$REPO/issues/$PR/comments" | jq -r --arg since "$SINCE" \
-            '[.[] | select(.user.login == "claude[bot]" and .created_at >= $since and (.body | contains("**Verdict:**")))] | last | .body // ""' \
-            | grep -m1 -i '\*\*Verdict:\*\*' || true)
-          echo "this run's verdict line: ${verdict:-<none found>}"
-          echo "$verdict" | grep -qi 'changes requested' || { echo "not 'changes requested'; nothing to escalate"; exit 0; }
-
           issue=$(gh pr view "$PR" --json closingIssuesReferences --jq '.closingIssuesReferences[0].number // empty')
           target=${issue:-$PR}
-          used=$(gh api --paginate "repos/$REPO/issues/$target/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- claude-fix-attempt -->")) | .id' | wc -l)
-          echo "fix attempts used on #$target: $used of $MAX_FIX_ATTEMPTS"
-          [ "$used" -ge "$MAX_FIX_ATTEMPTS" ] || { echo "retry budget not exhausted; not escalating"; exit 0; }
+          used=$(gh api --paginate "repos/$GH_REPO/issues/$target/comments?per_page=100" \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- claude-fix-attempt -->")) | .id' | wc -l | tr -d ' ')
+          echo "automatic fix attempts used on #$target: $used"
+          echo "attempts=$used" >> "$GITHUB_OUTPUT"
 
-          already=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | index("needs-human") != null')
-          gh label create needs-human --color b60205 --description "Needs a human decision or review before an agent works it" 2>/dev/null || true
-          gh pr edit "$PR" --add-label needs-human
-          [ -z "$issue" ] || gh issue edit "$issue" --add-label needs-human
-          if [ "$already" != "true" ]; then
-            printf '%s\n' "**Escalating to a human.** The review still requests changes after $used automatic fix attempt(s) on #$target, which is the limit. Labelled \`needs-human\`; further automatic fixes are disabled for this issue." \
-              | gh pr comment "$PR" --body-file -
-          fi
-
-  # Functional QA, once per PR: after the FIRST successful review (opened / ready_for_review, not on
-  # every push). Re-run later with `gh workflow run qa.yml -f pr_number=<n>`. See qa.yml for the design.
+  # Functional QA: after the first successful review (opened / ready_for_review), and again after every push
+  # that follows an automatic fix attempt, so a fix is re-tested and not just re-reviewed. Re-run by hand with
+  # `gh workflow run qa.yml -f pr_number=<n>`. See qa.yml for the design.
   qa:
-    needs: review
+    needs: [review, ctx]
     if: >-
       github.event_name == 'pull_request' &&
-      github.event.action != 'synchronize' &&
-      needs.review.result == 'success'
+      needs.review.result == 'success' &&
+      (github.event.action != 'synchronize' || needs.ctx.outputs.attempts != '0')
     permissions:
       contents: write
       pull-requests: write
@@ -308,4 +309,109 @@ jobs:
     uses: ./.github/workflows/qa.yml
     with:
       pr_number: ${{ github.event.pull_request.number }}
+    secrets: inherit
+
+  # The decision point of the automatic review/QA/fix loop. It runs after BOTH review and QA have posted, reads
+  # their verdicts (from this run's comments only), and does exactly one of:
+  #   - everything passed, or there is no verdict       -> stop
+  #   - review "changes requested" or QA FAIL/INCONCLUSIVE and fewer than MAX_FIX_ATTEMPTS used -> start the fixer
+  #   - same, but the budget is spent                   -> label the issue and PR needs-human, stop
+  # The fixer's push re-triggers this whole workflow (review, QA, decide), so the loop is: at most 2 fix attempts,
+  # each followed by a full review + QA, and then a human. Only PRs authored by the owner or claude[bot] qualify.
+  autofix:
+    needs: [review, qa, ctx]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.review.result == 'success' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft &&
+      (github.event.pull_request.user.login == github.repository_owner ||
+       github.event.pull_request.user.login == 'claude[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    outputs:
+      action: ${{ steps.decide.outputs.action }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          MAX_FIX_ATTEMPTS: "2" # keep in sync with claude-fix.yml
+        run: |
+          set -euo pipefail
+          echo "action=none" >> "$GITHUB_OUTPUT"
+
+          # Only comments written during THIS run count, so an old "changes requested" cannot restart the loop.
+          since=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID" --jq .created_at)
+          comments=$(gh api --paginate "repos/$GH_REPO/issues/$PR/comments?per_page=100" | jq -s 'add // []')
+          latest() { # author, marker -> body of the newest matching comment (empty if none)
+            jq -r --arg a "$1" --arg m "$2" --arg since "$since" \
+              '[.[] | select(.user.login == $a and .created_at >= $since and (.body | contains($m)))] | last | .body // ""' <<< "$comments"
+          }
+          review_line=$(latest 'claude[bot]' '**Verdict:**' | grep -m1 -i '\*\*Verdict:\*\*' || true)
+          qa_body=$(latest 'github-actions[bot]' '<!-- qa-report -->')
+          qa_line=$(printf '%s\n' "$qa_body" | grep -m1 '^## Functional QA' || true)
+          echo "review verdict: ${review_line:-<none this run>}"
+          echo "QA verdict:     ${qa_line:-<none this run>}"
+
+          reasons=()
+          if printf '%s' "$review_line" | grep -qi 'changes requested'; then
+            reasons+=("review requested changes")
+          fi
+          if printf '%s' "$qa_line" | grep -qE 'FAIL|INCONCLUSIVE'; then
+            # If the stack never ran (planning or startup failed) no code edit can fix it; do not burn an attempt.
+            if printf '%s' "$qa_body" | grep -qE 'No test results were produced|planning stage failed'; then
+              echo "QA could not run (infrastructure); not treated as a code failure"
+            else
+              reasons+=("QA $(printf '%s' "$qa_line" | grep -oE 'FAIL|INCONCLUSIVE' | head -1)")
+            fi
+          fi
+          if [ "${#reasons[@]}" -eq 0 ]; then
+            echo "Nothing is failing (or there is no verdict to act on). Stopping."
+            exit 0
+          fi
+          why=$(printf '%s; ' "${reasons[@]}"); why=${why%; }
+
+          labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
+          case ",$labels," in
+            *,needs-human,*) echo "Already labelled needs-human; leaving it to a person."; exit 0 ;;
+          esac
+
+          issue=$(gh pr view "$PR" --json closingIssuesReferences --jq '.closingIssuesReferences[0].number // empty')
+          target=${issue:-$PR}
+          used=$(gh api --paginate "repos/$GH_REPO/issues/$target/comments?per_page=100" \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- claude-fix-attempt -->")) | .id' | wc -l | tr -d ' ')
+          echo "Failing: $why. Automatic fix attempts used on #$target: $used of $MAX_FIX_ATTEMPTS."
+
+          if [ "$used" -ge "$MAX_FIX_ATTEMPTS" ]; then
+            gh label create needs-human --color b60205 --description "Needs a human decision or review before an agent works it" 2>/dev/null || true
+            gh pr edit "$PR" --add-label needs-human
+            [ -z "$issue" ] || gh issue edit "$issue" --add-label needs-human
+            printf '%s\n' "**Escalating to a human.** After $used automatic fix attempt(s) on #$target (the limit), this PR still fails: $why. Labelled \`needs-human\`; no further automatic fixes." \
+              | gh pr comment "$PR" --body-file -
+            exit 0
+          fi
+
+          echo "action=fix" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "Checks did not pass ($why). Starting automatic fix attempt **$((used + 1)) of $MAX_FIX_ATTEMPTS**. Review and QA run again after it pushes." \
+            | gh pr comment "$PR" --body-file -
+
+  # Runs the fixer (claude-fix.yml) when the decision job says so. Called as a reusable workflow so the event
+  # context (the PR, the actor) is the same one the review and QA already ran under.
+  fix:
+    needs: autofix
+    if: needs.autofix.outputs.action == 'fix'
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    uses: ./.github/workflows/claude-fix.yml
     secrets: inherit
