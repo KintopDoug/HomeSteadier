@@ -107,6 +107,16 @@ export const Header = observer(() => {
                 </MenuItem>
               )}
 
+              {session.activeFarm?.roleName === "Admin" && (
+                <MenuItem
+                  component={Link}
+                  to="/edit-farm"
+                  onClick={viewModel.closeUserMenu}
+                >
+                  Edit Farm
+                </MenuItem>
+              )}
+
               <MenuItem
                 component={Link}
                 to="/change-password"

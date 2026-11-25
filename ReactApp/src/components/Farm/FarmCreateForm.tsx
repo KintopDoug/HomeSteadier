@@ -6,6 +6,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { Form, FormSubmitButton, FormTextField } from "../Form";
+import type { FarmResponse } from "../../models/response/FarmResponse";
 import { CreateFarmViewModel } from "../../viewModels/CreateFarmViewModel";
 
 const createFarmSchema = z.object({
@@ -17,20 +18,28 @@ const createFarmSchema = z.object({
   country: z.string(),
 });
 
-export const FarmCreateForm = observer(() => {
-  const viewModel = useMemo(() => new CreateFarmViewModel(), []);
+interface FarmCreateFormProps {
+  /** When given, the form edits this farm instead of creating a new one. */
+  farm?: FarmResponse;
+}
+
+export const FarmCreateForm = observer(({ farm }: FarmCreateFormProps) => {
+  const viewModel = useMemo(() => new CreateFarmViewModel(farm ?? null), [farm]);
 
   return (
     <div className="farm-create-form">
       <Form schema={createFarmSchema} values={viewModel.values} onSubmit={viewModel.submit}>
         <Typography variant="h4" component="h1" align="center" sx={{ mb: 1 }}>
-          Create Your Farm
+          {viewModel.isEditing ? "Edit Farm" : "Create Your Farm"}
         </Typography>
-        <Typography align="center" sx={{ mb: 3 }}>
-          You're not associated with any farms yet. Create one to get started.
-        </Typography>
+        {!viewModel.isEditing && (
+          <Typography align="center" sx={{ mb: 3 }}>
+            You're not associated with any farms yet. Create one to get started.
+          </Typography>
+        )}
 
         <Stack spacing={2}>
+          {viewModel.successMessage && <Alert severity="success">{viewModel.successMessage}</Alert>}
           {viewModel.errorMessage && <Alert severity="error">{viewModel.errorMessage}</Alert>}
 
           <FormTextField
@@ -100,7 +109,7 @@ export const FarmCreateForm = observer(() => {
           )}
 
           <FormSubmitButton variant="contained" fullWidth disabled={viewModel.isGeocoding}>
-            Create Farm
+            {viewModel.isEditing ? "Save Changes" : "Create Farm"}
           </FormSubmitButton>
         </Stack>
       </Form>

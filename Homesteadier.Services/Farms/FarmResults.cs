@@ -44,6 +44,17 @@ public enum CreateFarmStatus
     OwnerRoleMissing,
 }
 
+public enum UpdateFarmStatus
+{
+    Success,
+
+    /// <summary>
+    /// The caller isn't an admin of the farm — or isn't a member, or the farm doesn't exist. These
+    /// are deliberately not told apart so the endpoint doesn't reveal which farm ids exist.
+    /// </summary>
+    NotFarmAdmin,
+}
+
 public enum CreateFarmInvitationStatus
 {
     Success,

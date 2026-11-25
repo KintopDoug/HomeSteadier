@@ -2,6 +2,7 @@ import { makeAutoObservable, runInAction } from "mobx";
 import { FarmApi } from "../api/FarmApi";
 import { getApiErrorMessage } from "../api/apiErrors";
 import { geocodeAddress } from "../services/geocoding";
+import type { FarmResponse } from "../models/response/FarmResponse";
 import { session } from "../stores/SessionStore";
 
 export interface CreateFarmFormValues {
@@ -25,6 +26,7 @@ export class CreateFarmViewModel {
   postalCode = "";
   country = "";
   errorMessage: string | null = null;
+  successMessage: string | null = null;
 
   isGeocoding = false;
   geocodeError: string | null = null;
@@ -36,7 +38,23 @@ export class CreateFarmViewModel {
   // Guards against an earlier, slower geocode request overwriting the result of a later one.
   private geocodeRequestId = 0;
 
-  constructor() {
+  // Set when editing an existing farm: the form is pre-filled from it and submit() updates it
+  // instead of creating a new one.
+  private readonly existingFarm: FarmResponse | null;
+
+  constructor(existingFarm: FarmResponse | null = null) {
+    this.existingFarm = existingFarm;
+    if (existingFarm) {
+      this.name = existingFarm.name ?? "";
+      this.addressLine = existingFarm.addressLine ?? "";
+      this.city = existingFarm.city ?? "";
+      this.state = existingFarm.state ?? "";
+      this.postalCode = existingFarm.postalCode ?? "";
+      this.country = existingFarm.country ?? "";
+      // Already located, so saving without touching the address needs no new geocode.
+      this.resolvedLatitude = Number(existingFarm.latitude);
+      this.resolvedLongitude = Number(existingFarm.longitude);
+    }
     makeAutoObservable(this, {}, { autoBind: true });
   }
 
@@ -91,6 +109,10 @@ export class CreateFarmViewModel {
   setCountry(value: string) {
     this.country = value;
     this.onAddressFieldChanged();
+  }
+
+  setSuccessMessage(message: string | null) {
+    this.successMessage = message;
   }
 
   setErrorMessage(message: string | null) {
@@ -150,16 +172,21 @@ export class CreateFarmViewModel {
     }
   }
 
+  get isEditing(): boolean {
+    return this.existingFarm !== null;
+  }
+
   async submit(values: CreateFarmFormValues) {
     this.setErrorMessage(null);
+    this.setSuccessMessage(null);
 
     if (this.resolvedLatitude === null || this.resolvedLongitude === null) {
-      this.setErrorMessage("Please enter an address that resolves to a location before creating the farm.");
+      this.setErrorMessage("Please enter an address that resolves to a location before saving the farm.");
       return;
     }
 
     try {
-      const farm = await FarmApi.createAsync({
+      const request = {
         name: values.name,
         addressLine: values.addressLine || undefined,
         city: values.city || undefined,
@@ -168,11 +195,29 @@ export class CreateFarmViewModel {
         country: values.country || undefined,
         latitude: this.resolvedLatitude,
         longitude: this.resolvedLongitude,
-      });
+      };
+
+      if (this.existingFarm) {
+        if (this.existingFarm.id === undefined) {
+          throw new Error("Farm has no id.");
+        }
+        const farm = await FarmApi.updateAsync(this.existingFarm.id, request);
+        session.setFarms(session.farms.map((f) => (f.id === farm.id ? farm : f)));
+        session.setActiveFarm(farm);
+        this.setSuccessMessage("Farm updated.");
+        return;
+      }
+
+      const farm = await FarmApi.createAsync(request);
       session.setFarms([...session.farms, farm]);
       session.setActiveFarm(farm);
     } catch (error) {
-      this.setErrorMessage(getApiErrorMessage(error, "Unable to create farm. Please try again."));
+      this.setErrorMessage(
+        getApiErrorMessage(
+          error,
+          this.existingFarm ? "Unable to update farm. Please try again." : "Unable to create farm. Please try again.",
+        ),
+      );
     }
   }
 }

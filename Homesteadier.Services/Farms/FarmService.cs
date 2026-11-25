@@ -12,6 +12,9 @@ public interface IFarmService
 
     /// <summary>Creates a farm and makes the creator its admin. Returns the new membership.</summary>
     Task<FarmResult<CreateFarmStatus, UserFarm>> CreateAsync(int userId, CreateFarmRequest request);
+
+    /// <summary>Updates a farm's name and location. Only a farm admin may; returns their membership.</summary>
+    Task<FarmResult<UpdateFarmStatus, UserFarm>> UpdateAsync(int userId, int farmId, UpdateFarmRequest request);
 }
 
 /// <summary>
@@ -25,6 +28,8 @@ internal class FarmService : IFarmService
     /// invitation can confer, not a separate "owner" concept.
     /// </summary>
     private const string OwnerRoleName = "Admin";
+
+    private const string AdminRoleName = OwnerRoleName;
 
     private readonly IFarmRepository _farmRepository;
     private readonly IUserFarmRepository _userFarmRepository;
@@ -91,5 +96,37 @@ internal class FarmService : IFarmService
         await _userFarmRepository.SaveChangesAsync();
 
         return FarmResult<CreateFarmStatus, UserFarm>.Succeeded(CreateFarmStatus.Success, userFarm);
+    }
+
+    public async Task<FarmResult<UpdateFarmStatus, UserFarm>> UpdateAsync(
+        int userId, int farmId, UpdateFarmRequest request)
+    {
+        var membership = await _userFarmRepository.GetByUserAndFarmAsync(userId, farmId);
+        if (membership is null || membership.FarmRoleType.Name != AdminRoleName)
+        {
+            return FarmResult<UpdateFarmStatus, UserFarm>.Failed(UpdateFarmStatus.NotFarmAdmin);
+        }
+
+        var farm = await _farmRepository.GetByIdAsync(farmId);
+        if (farm is null)
+        {
+            return FarmResult<UpdateFarmStatus, UserFarm>.Failed(UpdateFarmStatus.NotFarmAdmin);
+        }
+
+        farm.Name = request.Name;
+        farm.AddressLine = request.AddressLine;
+        farm.City = request.City;
+        farm.State = request.State;
+        farm.PostalCode = request.PostalCode;
+        farm.Country = request.Country;
+        farm.Latitude = request.Latitude;
+        farm.Longitude = request.Longitude;
+        // updated_at has only an insert-time default, and the column is "timestamp without time
+        // zone", so store the UTC wall-clock as Unspecified (same as UserStore.UpdateAsync).
+        farm.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        await _farmRepository.SaveChangesAsync();
+
+        membership.Farm = farm;
+        return FarmResult<UpdateFarmStatus, UserFarm>.Succeeded(UpdateFarmStatus.Success, membership);
     }
 }

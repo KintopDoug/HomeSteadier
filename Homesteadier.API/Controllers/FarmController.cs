@@ -51,4 +51,22 @@ public class FarmController : ControllerBase
                 StatusCode(StatusCodes.Status500InternalServerError, new { message = "Unable to create farm" }),
         };
     }
+
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<FarmResponse>> Update(int id, UpdateFarmRequest request)
+    {
+        var userId = User.UserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _farmService.UpdateAsync(userId.Value, id, request);
+
+        return result.Status switch
+        {
+            UpdateFarmStatus.Success => Ok(FarmResponse.FromEntity(result.Value)),
+            UpdateFarmStatus.NotFarmAdmin => Forbid(),
+        };
+    }
 }
