@@ -32,6 +32,23 @@ public sealed partial class CapturingEmailSender : IEmailSender
         return Uri.UnescapeDataString(TokenInLink().Match(email.Text).Groups["token"].Value);
     }
 
-    [GeneratedRegex(@"[?&]token=(?<token>[^\s&""<>]+)")]
+    /// <summary>The raw token from the newest password-reset link sent to <paramref name="address"/>.</summary>
+    public string PasswordResetTokenFor(string address)
+    {
+        var email = _sent.Reverse().FirstOrDefault(e =>
+            string.Equals(e.To, address, StringComparison.OrdinalIgnoreCase)
+            && e.Text.Contains("reset-password", StringComparison.Ordinal)
+            && TokenInLink().IsMatch(e.Text))
+            ?? throw new InvalidOperationException($"No password reset email with a link was sent to {address}.");
+
+        return Uri.UnescapeDataString(TokenInLink().Match(email.Text).Groups["token"].Value);
+    }
+
+    /// <summary>How many password-reset emails (any link) have gone to <paramref name="address"/>.</summary>
+    public int PasswordResetCountFor(string address) =>
+        _sent.Count(e => string.Equals(e.To, address, StringComparison.OrdinalIgnoreCase)
+            && e.Text.Contains("reset-password", StringComparison.Ordinal));
+
+    [GeneratedRegex(@"[?&](?:invite)?[tT]oken=(?<token>[^\s&""<>]+)")]
     private static partial Regex TokenInLink();
 }

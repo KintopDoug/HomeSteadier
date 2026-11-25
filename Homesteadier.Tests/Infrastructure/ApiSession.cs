@@ -16,6 +16,7 @@ internal sealed class ApiSession
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    private readonly ApiFactory _factory;
     private readonly HttpClient _http;
 
     public string Email { get; }
@@ -24,6 +25,7 @@ internal sealed class ApiSession
 
     private ApiSession(ApiFactory factory)
     {
+        _factory = factory;
         _http = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -44,14 +46,15 @@ internal sealed class ApiSession
     public static ApiSession New(ApiFactory factory) => new(factory);
 
     /// <summary>Registers this person. A successful sign-up also signs them in.</summary>
-    public async Task<HttpResponseMessage> SignUpAsync()
+    public async Task<HttpResponseMessage> SignUpAsync(string? inviteToken = null, string? email = null)
     {
         var response = await _http.PostAsJsonAsync("/api/Auth/SignUp", new RegisterRequest
         {
-            Email = Email,
+            Email = email ?? Email,
             Password = Password,
             FirstName = "Integration",
             LastName = "Test",
+            InviteToken = inviteToken,
         });
         await RememberTokenAsync(response, HttpStatusCode.Created);
         return response;
@@ -73,6 +76,50 @@ internal sealed class ApiSession
     {
         var response = await _http.PostAsync("/api/Auth/Refresh", content: null);
         await RememberTokenAsync(response, HttpStatusCode.OK);
+        return response;
+    }
+
+    /// <summary>
+    /// The refresh token value a response set in its cookie, or null if it did not set one (or cleared it).
+    /// </summary>
+    public static string? RefreshCookieFrom(HttpResponseMessage response)
+    {
+        if (!response.Headers.TryGetValues("Set-Cookie", out var values))
+        {
+            return null;
+        }
+
+        foreach (var header in values)
+        {
+            const string prefix = "refreshToken=";
+            if (header.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                var value = header[prefix.Length..].Split(';')[0];
+                return value.Length == 0 ? null : value;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Presents a specific refresh token value (e.g. one captured earlier) from a client with no cookie jar of its
+    /// own, so the cookie this session holds is neither used nor replaced.
+    /// </summary>
+    public async Task<HttpResponseMessage> RefreshWithAsync(string rawRefreshToken)
+    {
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", _http.DefaultRequestHeaders.GetValues("X-Forwarded-For").Single());
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/Refresh");
+        request.Headers.Add("Cookie", $"refreshToken={rawRefreshToken}");
+        var response = await client.SendAsync(request);
+        // Buffer so the response outlives the client.
+        await response.Content.LoadIntoBufferAsync();
         return response;
     }
 
