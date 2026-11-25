@@ -139,7 +139,10 @@ signup() {
 
 call() { # [--token JWT] METHOD /path [json-body]
   local token="${API_TOKEN:-}"
-  if [ "${1:-}" = "--token" ]; then token="${2:-}"; shift 2; fi
+  if [ "${1:-}" = "--token" ]; then
+    [ -n "${2:-}" ] || { echo "--token needs a value: call --token JWT METHOD /path" >&2; exit 2; }
+    token="$2"; shift 2
+  fi
   [ -n "$token" ] || { [ -f "$LOG_DIR/token" ] && token="$(cat "$LOG_DIR/token")"; }
   local method="${1:-}" path="${2:-}" data="${3:-}" tmp code
   [[ "$API_URL" =~ ^http://(localhost|127\.0\.0\.1)(:[0-9]+)?$ ]] \

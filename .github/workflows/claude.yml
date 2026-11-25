@@ -97,6 +97,7 @@ jobs:
       # dotnet-ef 9.x, not the SDK's 10.x: it has to match the Microsoft.EntityFrameworkCore 9 packages. Needed
       # only by `dotnet gen` (EF scaffolding from the live schema).
       - name: Install dotnet-ef
+        id: ef
         continue-on-error: true
         run: |
           dotnet tool install --global dotnet-ef --version "9.*"
@@ -119,6 +120,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           POSTGRES_PASSWORD: qa-ci-throwaway
+          STACK_LOG_DIR: ${{ runner.temp }}/agent
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -146,7 +148,8 @@ jobs:
               with `bash qa/stack.sh`. After changing API code run `bash qa/stack.sh restart-api` before testing it.
               For schema or API-surface work regenerate with `bash qa/stack.sh cli database update`, then
               `bash qa/stack.sh cli dotnet gen`, then `bash qa/stack.sh cli packages gen` (generated files must come from
-              these commands, never be hand-edited). Generator output can include changes unrelated to your work (for
+              these commands, never be hand-edited; dotnet-ef, which `dotnet gen` needs,
+              ${{ steps.ef.outcome == 'success' && 'installed fine' || 'FAILED to install, so `dotnet gen` will not work: say so' }}). Generator output can include changes unrelated to your work (for
               example, the committed AuthApi.tsx may differ in route casing): revert unrelated changes with git checkout
               and mention it. In implement.md list the exact commands you ran against the database and what they returned.
             Your final message is discarded; nobody reads it.
@@ -205,6 +208,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           POSTGRES_PASSWORD: qa-ci-throwaway
+          STACK_LOG_DIR: ${{ runner.temp }}/agent
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
