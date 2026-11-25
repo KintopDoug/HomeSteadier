@@ -26,10 +26,15 @@ public class AuthTests
         var user = await ApiSession.ReadAsync<UserResponse>(me);
         Assert.Equal(person.Email, user.Email, ignoreCase: true);
 
-        // Login set the httpOnly refresh cookie; presenting it yields a fresh access token.
+        // Login set the httpOnly refresh cookie; presenting it yields an access token that really authenticates.
         var refresh = await person.RefreshAsync();
         Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
-        Assert.False(string.IsNullOrEmpty(person.Token));
+        var meAfterRefresh = await person.GetAsync("/api/Auth/Me");
+        Assert.Equal(HttpStatusCode.OK, meAfterRefresh.StatusCode);
+
+        // Refresh tokens rotate: the cookie from that response must work for the next refresh too.
+        var refreshAgain = await person.RefreshAsync();
+        Assert.Equal(HttpStatusCode.OK, refreshAgain.StatusCode);
     }
 
     [Fact]

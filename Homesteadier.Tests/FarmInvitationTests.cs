@@ -67,6 +67,28 @@ public class FarmInvitationTests
     }
 
     [Fact]
+    public async Task A_signed_in_person_who_is_not_a_member_cannot_invite_to_someone_elses_farm()
+    {
+        var factory = await SharedStack.GetAsync();
+        var owner = ApiSession.New(factory);
+        await owner.SignUpAsync();
+        var farm = await FarmTests.CreateFarmAsync(owner);
+        var userRole = await RoleAsync(owner, "User");
+
+        var outsider = ApiSession.New(factory);
+        await outsider.SignUpAsync(); // signed in, but belongs to no farm
+
+        var response = await outsider.PostAsync("/api/FarmInvitations", new CreateFarmInvitationRequest
+        {
+            FarmId = farm.Id,
+            Email = UniqueAddress(),
+            FarmRoleTypeId = userRole.Id,
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Inviting_requires_signing_in()
     {
         var factory = await SharedStack.GetAsync();

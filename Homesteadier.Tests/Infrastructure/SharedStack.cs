@@ -46,6 +46,8 @@ internal static class SharedStack
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
             container.DisposeAsync().AsTask().GetAwaiter().GetResult();
 
+        // These are process-wide and never restored. That is deliberate and fine because this project is its own
+        // test process; do not run other test projects in the same process.
         // Program.cs reads these exactly as it does anywhere else: environment variables win over the shared
         // appsettings.shared.json, and ConnectionStrings:<Database:Name> is what Aspire injects in real runs.
         SetEnv("ConnectionStrings__homesteadier-db", container.GetConnectionString());
