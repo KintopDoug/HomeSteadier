@@ -9,38 +9,28 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as RegisterRouteImport } from './routes/register'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as AcceptInvitationRouteImport } from './routes/accept-invitation'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedLivestockRouteImport } from './routes/_authenticated.livestock'
-import { Route as AuthenticatedInviteMemberRouteImport } from './routes/_authenticated.invite-member'
-import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated.home'
-import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated.garden'
-import { Route as AuthenticatedConstructionRouteImport } from './routes/_authenticated.construction'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as AcceptInvitationRouteImport } from './routes/accept-invitation'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated.change-password'
+import { Route as AuthenticatedConstructionRouteImport } from './routes/_authenticated.construction'
+import { Route as AuthenticatedFarmMembersRouteImport } from './routes/_authenticated.farm-members'
+import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated.garden'
+import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated.home'
+import { Route as AuthenticatedInviteMemberRouteImport } from './routes/_authenticated.invite-member'
+import { Route as AuthenticatedLivestockRouteImport } from './routes/_authenticated.livestock'
 
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RegisterRoute = RegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AcceptInvitationRoute = AcceptInvitationRouteImport.update({
@@ -48,18 +38,52 @@ const AcceptInvitationRoute = AcceptInvitationRouteImport.update({
   path: '/accept-invitation',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedLivestockRoute = AuthenticatedLivestockRouteImport.update({
-  id: '/livestock',
-  path: '/livestock',
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedChangePasswordRoute =
+  AuthenticatedChangePasswordRouteImport.update({
+    id: '/change-password',
+    path: '/change-password',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedConstructionRoute =
+  AuthenticatedConstructionRouteImport.update({
+    id: '/construction',
+    path: '/construction',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedFarmMembersRoute =
+  AuthenticatedFarmMembersRouteImport.update({
+    id: '/farm-members',
+    path: '/farm-members',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedGardenRoute = AuthenticatedGardenRouteImport.update({
+  id: '/garden',
+  path: '/garden',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedInviteMemberRoute =
@@ -68,28 +92,11 @@ const AuthenticatedInviteMemberRoute =
     path: '/invite-member',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
-  id: '/home',
-  path: '/home',
+const AuthenticatedLivestockRoute = AuthenticatedLivestockRouteImport.update({
+  id: '/livestock',
+  path: '/livestock',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedGardenRoute = AuthenticatedGardenRouteImport.update({
-  id: '/garden',
-  path: '/garden',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedConstructionRoute =
-  AuthenticatedConstructionRouteImport.update({
-    id: '/construction',
-    path: '/construction',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedChangePasswordRoute =
-  AuthenticatedChangePasswordRouteImport.update({
-    id: '/change-password',
-    path: '/change-password',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/construction': typeof AuthenticatedConstructionRoute
+  '/farm-members': typeof AuthenticatedFarmMembersRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/home': typeof AuthenticatedHomeRoute
   '/invite-member': typeof AuthenticatedInviteMemberRoute
@@ -114,6 +122,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/construction': typeof AuthenticatedConstructionRoute
+  '/farm-members': typeof AuthenticatedFarmMembersRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/home': typeof AuthenticatedHomeRoute
   '/invite-member': typeof AuthenticatedInviteMemberRoute
@@ -130,6 +139,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
   '/_authenticated/construction': typeof AuthenticatedConstructionRoute
+  '/_authenticated/farm-members': typeof AuthenticatedFarmMembersRoute
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/invite-member': typeof AuthenticatedInviteMemberRoute
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/change-password'
     | '/construction'
+    | '/farm-members'
     | '/garden'
     | '/home'
     | '/invite-member'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/change-password'
     | '/construction'
+    | '/farm-members'
     | '/garden'
     | '/home'
     | '/invite-member'
@@ -175,6 +187,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/change-password'
     | '/_authenticated/construction'
+    | '/_authenticated/farm-members'
     | '/_authenticated/garden'
     | '/_authenticated/home'
     | '/_authenticated/invite-member'
@@ -193,39 +206,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/register': {
-      id: '/register'
-      path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof RegisterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/accept-invitation': {
-      id: '/accept-invitation'
-      path: '/accept-invitation'
-      fullPath: '/accept-invitation'
-      preLoaderRoute: typeof AcceptInvitationRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -235,39 +220,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/accept-invitation': {
+      id: '/accept-invitation'
+      path: '/accept-invitation'
+      fullPath: '/accept-invitation'
+      preLoaderRoute: typeof AcceptInvitationRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/livestock': {
-      id: '/_authenticated/livestock'
-      path: '/livestock'
-      fullPath: '/livestock'
-      preLoaderRoute: typeof AuthenticatedLivestockRouteImport
-      parentRoute: typeof AuthenticatedRoute
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/invite-member': {
-      id: '/_authenticated/invite-member'
-      path: '/invite-member'
-      fullPath: '/invite-member'
-      preLoaderRoute: typeof AuthenticatedInviteMemberRouteImport
-      parentRoute: typeof AuthenticatedRoute
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/home': {
-      id: '/_authenticated/home'
-      path: '/home'
-      fullPath: '/home'
-      preLoaderRoute: typeof AuthenticatedHomeRouteImport
-      parentRoute: typeof AuthenticatedRoute
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/garden': {
-      id: '/_authenticated/garden'
-      path: '/garden'
-      fullPath: '/garden'
-      preLoaderRoute: typeof AuthenticatedGardenRouteImport
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/change-password': {
+      id: '/_authenticated/change-password'
+      path: '/change-password'
+      fullPath: '/change-password'
+      preLoaderRoute: typeof AuthenticatedChangePasswordRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/construction': {
@@ -277,11 +269,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConstructionRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/change-password': {
-      id: '/_authenticated/change-password'
-      path: '/change-password'
-      fullPath: '/change-password'
-      preLoaderRoute: typeof AuthenticatedChangePasswordRouteImport
+    '/_authenticated/farm-members': {
+      id: '/_authenticated/farm-members'
+      path: '/farm-members'
+      fullPath: '/farm-members'
+      preLoaderRoute: typeof AuthenticatedFarmMembersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/garden': {
+      id: '/_authenticated/garden'
+      path: '/garden'
+      fullPath: '/garden'
+      preLoaderRoute: typeof AuthenticatedGardenRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/home': {
+      id: '/_authenticated/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof AuthenticatedHomeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/invite-member': {
+      id: '/_authenticated/invite-member'
+      path: '/invite-member'
+      fullPath: '/invite-member'
+      preLoaderRoute: typeof AuthenticatedInviteMemberRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/livestock': {
+      id: '/_authenticated/livestock'
+      path: '/livestock'
+      fullPath: '/livestock'
+      preLoaderRoute: typeof AuthenticatedLivestockRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
   }
@@ -290,6 +310,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
   AuthenticatedConstructionRoute: typeof AuthenticatedConstructionRoute
+  AuthenticatedFarmMembersRoute: typeof AuthenticatedFarmMembersRoute
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedInviteMemberRoute: typeof AuthenticatedInviteMemberRoute
@@ -299,6 +320,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
   AuthenticatedConstructionRoute: AuthenticatedConstructionRoute,
+  AuthenticatedFarmMembersRoute: AuthenticatedFarmMembersRoute,
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedInviteMemberRoute: AuthenticatedInviteMemberRoute,

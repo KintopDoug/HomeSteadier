@@ -29,4 +29,30 @@ public class UserFarmRepository : Repository<UserFarm>, IUserFarmRepository
             .Include(uf => uf.FarmRoleType)
             .FirstOrDefaultAsync(uf => uf.UserId == userId && uf.FarmId == farmId);
     }
+
+    public async Task<List<UserFarm>> GetByFarmIdAsync(int farmId)
+    {
+        return await _context.Set<UserFarm>()
+            .AsNoTracking()
+            .Include(uf => uf.User)
+            .Include(uf => uf.FarmRoleType)
+            .Where(uf => uf.FarmId == farmId)
+            .OrderBy(uf => uf.User.FirstName)
+            .ThenBy(uf => uf.User.LastName)
+            .ThenBy(uf => uf.Id)
+            .ToListAsync();
+    }
+
+    public async Task<UserFarm?> GetTrackedByUserAndFarmAsync(int userId, int farmId)
+    {
+        return await _context.Set<UserFarm>()
+            .Include(uf => uf.FarmRoleType)
+            .FirstOrDefaultAsync(uf => uf.UserId == userId && uf.FarmId == farmId);
+    }
+
+    public async Task<int> CountByFarmAndRoleAsync(int farmId, int farmRoleTypeId)
+    {
+        return await _context.Set<UserFarm>()
+            .CountAsync(uf => uf.FarmId == farmId && uf.FarmRoleTypeId == farmRoleTypeId);
+    }
 }
