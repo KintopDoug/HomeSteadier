@@ -35,7 +35,9 @@ jobs:
   fix:
     # Label path: only the owner's `claude-address-review` label. Called path (action is opened/synchronize/...):
     # claude.yml has already decided; the checks below still apply.
+    # !cancelled() overrides the implicit success(), so a failed QA job in the caller cannot skip this one.
     if: >-
+      !cancelled() &&
       (github.event.action != 'labeled' ||
        (github.event.label.name == 'claude-address-review' &&
         github.event.sender.login == github.repository_owner)) &&
