@@ -461,7 +461,8 @@ jobs:
   # context (the PR, the actor) is the same one the review and QA already ran under.
   fix:
     needs: autofix
-    if: needs.autofix.outputs.action == 'fix'
+    # !cancelled() overrides the implicit success(): qa/report goes red on a FAIL verdict, which is exactly when a fix is wanted.
+    if: ${{ !cancelled() && needs.autofix.outputs.action == 'fix' }}
     permissions:
       contents: write
       pull-requests: write
