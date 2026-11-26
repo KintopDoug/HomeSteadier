@@ -12,6 +12,15 @@ public interface IFarmService
 
     /// <summary>Creates a farm and makes the creator its admin. Returns the new membership.</summary>
     Task<FarmResult<CreateFarmStatus, UserFarm>> CreateAsync(int userId, CreateFarmRequest request);
+
+    /// <summary>Lists a farm's members. Admin only.</summary>
+    Task<FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>> GetMembersAsync(int callerId, int farmId);
+
+    /// <summary>Changes a member's role. Admin only; a farm's last admin can't be demoted.</summary>
+    Task<FarmMemberStatus> UpdateMemberRoleAsync(int callerId, int farmId, int memberUserId, int farmRoleTypeId);
+
+    /// <summary>Removes a member. Admin only; a farm's last admin can't be removed.</summary>
+    Task<FarmMemberStatus> RemoveMemberAsync(int callerId, int farmId, int memberUserId);
 }
 
 /// <summary>
@@ -92,4 +101,84 @@ internal class FarmService : IFarmService
 
         return FarmResult<CreateFarmStatus, UserFarm>.Succeeded(CreateFarmStatus.Success, userFarm);
     }
+
+    public async Task<FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>> GetMembersAsync(int callerId, int farmId)
+    {
+        if (!await IsAdminAsync(callerId, farmId))
+        {
+            return FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>.Failed(FarmMemberStatus.NotFarmAdmin);
+        }
+
+        var members = await _userFarmRepository.GetByFarmIdAsync(farmId);
+        return FarmResult<FarmMemberStatus, IReadOnlyList<UserFarm>>.Succeeded(FarmMemberStatus.Success, members);
+    }
+
+    public async Task<FarmMemberStatus> UpdateMemberRoleAsync(
+        int callerId, int farmId, int memberUserId, int farmRoleTypeId)
+    {
+        if (!await IsAdminAsync(callerId, farmId))
+        {
+            return FarmMemberStatus.NotFarmAdmin;
+        }
+
+        var membership = await _userFarmRepository.GetByUserAndFarmAsync(memberUserId, farmId);
+        if (membership is null)
+        {
+            return FarmMemberStatus.MemberNotFound;
+        }
+
+        var newRole = await _farmRoleTypeRepository.GetByIdAsync(farmRoleTypeId);
+        if (newRole is null)
+        {
+            return FarmMemberStatus.InvalidRole;
+        }
+
+        if (membership.FarmRoleTypeId == newRole.Id)
+        {
+            return FarmMemberStatus.Success;
+        }
+
+        if (membership.FarmRoleType.Name == OwnerRoleName && await IsLastAdminAsync(farmId, membership.FarmRoleTypeId))
+        {
+            return FarmMemberStatus.LastAdmin;
+        }
+
+        membership.FarmRoleTypeId = newRole.Id;
+        membership.FarmRoleType = null!; // let EF resolve the navigation from the new id
+        await _userFarmRepository.UpdateAsync(membership);
+        await _userFarmRepository.SaveChangesAsync();
+        return FarmMemberStatus.Success;
+    }
+
+    public async Task<FarmMemberStatus> RemoveMemberAsync(int callerId, int farmId, int memberUserId)
+    {
+        if (!await IsAdminAsync(callerId, farmId))
+        {
+            return FarmMemberStatus.NotFarmAdmin;
+        }
+
+        var membership = await _userFarmRepository.GetByUserAndFarmAsync(memberUserId, farmId);
+        if (membership is null)
+        {
+            return FarmMemberStatus.MemberNotFound;
+        }
+
+        if (membership.FarmRoleType.Name == OwnerRoleName && await IsLastAdminAsync(farmId, membership.FarmRoleTypeId))
+        {
+            return FarmMemberStatus.LastAdmin;
+        }
+
+        await _userFarmRepository.DeleteAsync(membership);
+        await _userFarmRepository.SaveChangesAsync();
+        return FarmMemberStatus.Success;
+    }
+
+    private async Task<bool> IsAdminAsync(int userId, int farmId)
+    {
+        var membership = await _userFarmRepository.GetByUserAndFarmAsync(userId, farmId);
+        return membership is not null && membership.FarmRoleType.Name == OwnerRoleName;
+    }
+
+    private async Task<bool> IsLastAdminAsync(int farmId, int adminRoleTypeId)
+        => await _userFarmRepository.CountByFarmAndRoleAsync(farmId, adminRoleTypeId) <= 1;
 }
