@@ -73,10 +73,26 @@ export async function loginUi(page: Page, user: QaUser): Promise<void> {
   await expect(page).not.toHaveURL(/\/login/);
 }
 
+/**
+ * A distinct client IP per test. The API's `auth` rate limit allows 10 requests/minute per client IP, so
+ * a spec whose tests each sign up and sign in would otherwise share one bucket and hit 429. The API
+ * honours a single X-Forwarded-For value (ForwardLimit=1), so giving each test its own address gives it
+ * its own bucket. The limit itself is unchanged. Collisions within a minute are negligible (~16M addresses).
+ */
+const uniqueClientIp = () => {
+  const n = () => Math.floor(Math.random() * 254) + 1;
+  return `10.${n()}.${n()}.${n()}`;
+};
+
 export const test = base.extend<{
   /** Attach a numbered screenshot to the report: `await shot(page, "menu open")`. */
   shot: (page: Page, name: string) => Promise<void>;
 }>({
+  // extraHTTPHeaders is applied to the page's browser traffic AND to the `request` fixture, so both the
+  // UI sign-in and API sign-ups of one test share that test's bucket and no other test's.
+  extraHTTPHeaders: async ({}, use) => {
+    await use({ "X-Forwarded-For": uniqueClientIp() });
+  },
   shot: async ({}, use, testInfo) => {
     let n = 0;
     await use(async (page, name) => {
