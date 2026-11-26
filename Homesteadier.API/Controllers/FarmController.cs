@@ -51,4 +51,59 @@ public class FarmController : ControllerBase
                 StatusCode(StatusCodes.Status500InternalServerError, new { message = "Unable to create farm" }),
         };
     }
+
+    [HttpGet("{farmId:int}/members")]
+    public async Task<ActionResult<List<FarmMemberResponse>>> GetMembers(int farmId)
+    {
+        var userId = User.UserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _farmService.GetMembersAsync(userId.Value, farmId);
+        return result.Status switch
+        {
+            FarmMemberStatus.Success => Ok(result.Value.Select(FarmMemberResponse.FromEntity).ToList()),
+            _ => Forbid(),
+        };
+    }
+
+    [HttpPut("{farmId:int}/members/{memberUserId:int}")]
+    public async Task<IActionResult> UpdateMemberRole(
+        int farmId, int memberUserId, UpdateFarmMemberRoleRequest request)
+    {
+        var userId = User.UserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var status = await _farmService.UpdateMemberRoleAsync(
+            userId.Value, farmId, memberUserId, request.FarmRoleTypeId);
+        return MapMemberStatus(status);
+    }
+
+    [HttpDelete("{farmId:int}/members/{memberUserId:int}")]
+    public async Task<IActionResult> RemoveMember(int farmId, int memberUserId)
+    {
+        var userId = User.UserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var status = await _farmService.RemoveMemberAsync(userId.Value, farmId, memberUserId);
+        return MapMemberStatus(status);
+    }
+
+    private IActionResult MapMemberStatus(FarmMemberStatus status) => status switch
+    {
+        FarmMemberStatus.Success => NoContent(),
+        FarmMemberStatus.NotFarmAdmin => Forbid(),
+        FarmMemberStatus.MemberNotFound => NotFound(new { message = "Member not found." }),
+        FarmMemberStatus.InvalidRole => BadRequest(new { message = "Invalid role." }),
+        FarmMemberStatus.LastAdmin =>
+            Conflict(new { message = "A farm must keep at least one admin." }),
+    };
 }
