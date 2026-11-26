@@ -73,10 +73,26 @@ export async function loginUi(page: Page, user: QaUser): Promise<void> {
   await expect(page).not.toHaveURL(/\/login/);
 }
 
+/**
+ * A random private IPv4 per test. The API's `auth` rate limit allows 10 requests/minute per client IP in
+ * one shared bucket; sending a distinct X-Forwarded-For per test (as `ApiSession` does in Homesteadier.Tests)
+ * gives each test its own bucket, so a long spec never hits 429. The QA API honours the header because it runs
+ * without a trusting proxy in front; deployed environments are untouched.
+ */
+const testClientIp = () => {
+  const octet = () => 1 + Math.floor(Math.random() * 254);
+  return `10.${octet()}.${octet()}.${octet()}`;
+};
+
 export const test = base.extend<{
+  /** Per-test client IP header; applies to both the `request` fixture and all browser traffic. */
+  extraHTTPHeaders: Record<string, string>;
   /** Attach a numbered screenshot to the report: `await shot(page, "menu open")`. */
   shot: (page: Page, name: string) => Promise<void>;
 }>({
+  extraHTTPHeaders: async ({}, use) => {
+    await use({ "X-Forwarded-For": testClientIp() });
+  },
   shot: async ({}, use, testInfo) => {
     let n = 0;
     await use(async (page, name) => {
